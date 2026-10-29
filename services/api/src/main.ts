@@ -89,8 +89,8 @@ cron.schedule('0 2 * * 0', async () => {
 });
 
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
-    console.log(`Campus Skill Exchange API running on http://localhost:${PORT}`);
+  app.listen(Number(PORT), '0.0.0.0', () => {
+    console.log(`Campus Skill Exchange API running on http://0.0.0.0:${PORT} (accessible via LAN/USB reverse)`);
     console.log(`Background jobs initialized (Monthly refill, Annual reverification, Skill demand reports).`);
   });
 }

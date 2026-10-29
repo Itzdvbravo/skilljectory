@@ -14,15 +14,21 @@ import {
 } from '@skill-exchange/shared-types';
 import Constants from 'expo-constants';
 
-// Determine the host for API requests:
-// 1. If running in Expo Go on a physical device, get the debugger host IP (e.g. 192.168.0.108)
-// 2. If running on Android emulator, use 10.0.2.2 or localhost with adb reverse tcp:4000 tcp:4000
-const expoHost = Constants.expoConfig?.hostUri
-  ? Constants.expoConfig.hostUri.split(':')[0]
-  : null;
+// Determine primary API host from Expo debugger URL (e.g. 192.168.0.108) or fallback
+const expoHost =
+  Constants.expoConfig?.hostUri?.split(':')[0] ||
+  (Constants as any).manifest2?.extra?.expoClient?.hostUri?.split(':')[0] ||
+  (Constants as any).manifest?.debuggerHost?.split(':')[0] ||
+  '192.168.0.108';
 
-const API_HOST = expoHost || (Platform.OS === 'android' ? '10.0.2.2' : 'localhost');
-const API_BASE_URL = `http://${API_HOST}:4000/api`;
+// Build candidate base URLs:
+// 1. localhost:4000 (works instantly via 'adb reverse tcp:4000 tcp:4000' over USB)
+// 2. expoHost:4000 (works over Wi-Fi / LAN)
+const candidateHosts = Platform.OS === 'android'
+  ? Array.from(new Set(['localhost', '192.168.0.108', expoHost, '10.0.2.2'])).filter(Boolean)
+  : Array.from(new Set(['localhost', '192.168.0.108', expoHost])).filter(Boolean);
+
+let cachedWorkingHost: string | null = null;
 
 async function request(endpoint: string, options: RequestInit = {}) {
   const token = useAuthStore.getState().token;
@@ -35,22 +41,39 @@ async function request(endpoint: string, options: RequestInit = {}) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  try {
-    const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers,
-    });
+  // If we already found a host that works, prioritize it
+  const hostsToTry = cachedWorkingHost
+    ? [cachedWorkingHost, ...candidateHosts.filter((h) => h !== cachedWorkingHost)]
+    : candidateHosts;
 
-    if (!res.ok) {
-      const errorJson = await res.json().catch(() => ({}));
-      throw new Error(errorJson.error || `HTTP error ${res.status}`);
+  let lastError: any = null;
+
+  for (const host of hostsToTry) {
+    const url = `http://${host}:4000/api${endpoint}`;
+    try {
+      const res = await fetch(url, {
+        ...options,
+        headers,
+      });
+
+      if (!res.ok) {
+        const errorJson = await res.json().catch(() => ({}));
+        throw new Error(errorJson.error || `HTTP error ${res.status}`);
+      }
+
+      cachedWorkingHost = host;
+      return await res.json();
+    } catch (err: any) {
+      lastError = err;
+      // If it's an HTTP 4xx error (e.g. 400 Bad Request, 401 Unauthorized), the server answered! Don't retry another host.
+      if (err.message && !err.message.includes('Network request failed') && !err.message.includes('Failed to fetch')) {
+        throw err;
+      }
     }
-
-    return await res.json();
-  } catch (err: any) {
-    console.warn(`[API] ${endpoint} request failed: ${err.message}. Using client fallback data.`);
-    throw err;
   }
+
+  console.warn(`[API] ${endpoint} request failed across hosts [${hostsToTry.join(', ')}]: ${lastError?.message}`);
+  throw lastError || new Error('Network request failed');
 }
 
 export const api = {
@@ -88,6 +111,8 @@ export const api = {
     request(`/sessions/${id}/remove-participant`, { method: 'POST', body: JSON.stringify({ participantUserId }) }),
   cancelSession: (id: string) =>
     request(`/sessions/${id}/cancel`, { method: 'POST' }),
+  startSessionEarly: (id: string) =>
+    request(`/sessions/${id}/start-early`, { method: 'POST' }),
   respondToMentorRequest: (id: string, accept: boolean) =>
     request(`/sessions/${id}/mentor-response`, { method: 'POST', body: JSON.stringify({ accept }) }),
   announceSession: (id: string) => request(`/sessions/${id}/announce`, { method: 'POST' }),

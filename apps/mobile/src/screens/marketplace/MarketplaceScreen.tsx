@@ -59,8 +59,8 @@ export const MarketplaceScreen = () => {
 
   // User unlock status & progress
   const [isBlogUnlocked, setIsBlogUnlocked] = useState(false);
-  const [totalHours, setTotalHours] = useState(18.5);
-  const [creditBalance, setCreditBalance] = useState(12.0);
+  const [totalHours, setTotalHours] = useState(0);
+  const [creditBalance, setCreditBalance] = useState(0);
 
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -72,85 +72,29 @@ export const MarketplaceScreen = () => {
   const loadData = async () => {
     try {
       setLoading(true);
+      const isAdmin = user?.username === 'admin' || user?.email === 'admin@adtu.in';
       // Fetch user profile for blog unlock criteria
       const meRes = await api.getMe().catch(() => null);
-      if (meRes) {
+      if (isAdmin) {
+        setIsBlogUnlocked(true);
+        setTotalHours(meRes?.totalSessionHours ?? 25.0);
+        setCreditBalance(meRes?.creditBalance ?? user?.creditBalance ?? 999.0);
+      } else if (meRes) {
         setIsBlogUnlocked(Boolean(meRes.unlockedBloggingAt));
-        setTotalHours(meRes.totalSessionHours ?? 18.5);
-        setCreditBalance(meRes.creditBalance ?? user?.creditBalance ?? 12.0);
+        setTotalHours(meRes.totalSessionHours ?? 0);
+        setCreditBalance(meRes.creditBalance ?? user?.creditBalance ?? 3.0);
+      } else {
+        setIsBlogUnlocked(Boolean(user?.unlockedBloggingAt));
+        setTotalHours(0);
+        setCreditBalance(user?.creditBalance ?? 3.0);
       }
 
       if (activeTab === 'materials') {
-        const items = await api.getMaterials().catch(() => [
-          {
-            id: 'mat_1',
-            sellerId: 'usr_2',
-            sellerName: 'Marcus Vance',
-            title: 'Complete Distributed Systems & Raft Consensus Cheat Sheet',
-            fileUrl: 'https://campus.edu/files/distributed_systems.pdf',
-            priceCredits: 3,
-            type: MaterialType.PDF,
-            createdAt: new Date().toISOString(),
-            hasPurchased: false,
-          },
-          {
-            id: 'mat_2',
-            sellerId: 'usr_3',
-            sellerName: 'Sarah Chen',
-            title: 'React Native Gesture Handler & Reanimated Master Slides',
-            fileUrl: 'https://campus.edu/files/react_native_slides.ppt',
-            priceCredits: 2,
-            type: MaterialType.PPT,
-            createdAt: new Date().toISOString(),
-            hasPurchased: true,
-          },
-          {
-            id: 'mat_3',
-            sellerId: 'usr_4',
-            sellerName: 'Priya Sharma',
-            title: 'PostgreSQL Advanced Query Optimization & B-Tree Indexing Notes',
-            fileUrl: 'https://campus.edu/files/postgres_optimization.pdf',
-            priceCredits: 4,
-            type: MaterialType.PDF,
-            createdAt: new Date().toISOString(),
-            hasPurchased: false,
-          },
-        ]);
-        setMaterials(items);
+        const items = await api.getMaterials().catch(() => []);
+        setMaterials(items || []);
       } else {
-        const blogItems = await api.getBlogPosts().catch(() => [
-          {
-            id: 'post_1',
-            authorId: 'usr_1',
-            authorName: 'Sarah Chen',
-            authorUsername: 'sarahc',
-            title: 'How I Transitioned from Zero to Hosting React Native Workshops',
-            content:
-              'Teaching peer students on campus is the fastest way to master software architecture. Preparing explanations forces you to address edge cases and deep dive into internals. Start small with 1-on-1s and scale to group workshops!',
-            mediaUrls: [],
-            status: 'published',
-            publishedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-            upvotesCount: 14,
-            hasUpvoted: true,
-            commentsCount: 3,
-          },
-          {
-            id: 'post_2',
-            authorId: 'usr_2',
-            authorName: 'Alex Rivera',
-            authorUsername: 'alexrivera',
-            title: 'Demystifying the Time-Credit Economy: Why Collusion Fails',
-            content:
-              'The mathematical rules behind multi-person attendance and multi-mentor split pools ensure honest time exchange on our campus. By tying time credits directly to verified classroom presence, everyone wins.',
-            mediaUrls: [],
-            status: 'published',
-            publishedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-            upvotesCount: 22,
-            hasUpvoted: false,
-            commentsCount: 7,
-          },
-        ]);
-        setPosts(blogItems);
+        const blogItems = await api.getBlogPosts().catch(() => []);
+        setPosts(blogItems || []);
       }
     } finally {
       setLoading(false);

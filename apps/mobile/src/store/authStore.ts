@@ -12,6 +12,14 @@ export interface UserAuthData {
   creditBalance: number;
   verificationExpiresAt?: string | null;
   activeCustomizations?: Record<string, string | null>;
+  course?: string | null;
+  department?: string | null;
+  enrollmentYear?: number | null;
+  yearsOfStudy?: number | null;
+  currentYear?: number | null;
+  teachSkills?: string[];
+  learnSkills?: string[];
+  unlockedBloggingAt?: string | null;
 }
 
 interface AuthState {
@@ -26,37 +34,21 @@ interface AuthState {
   logout: () => void;
 }
 export const useAuthStore = create<AuthState>((set) => ({
-  token:
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c3JfZGVmYXVsdF9kZW1vX3NjaG9sYXIiLCJlbWFpbCI6InNjaG9sYXJAY2FtcHVzLmVkdSIsImlhdCI6MTc5MzA5MTgwMiwiZXhwIjoxODI0NjI3ODAyfQ.KayjVdM1LPOqPJksCzfvwgatN3JuqTg3r6hzEbV82qI',
-  user: {
-    id: 'usr_default_demo_scholar',
-    email: 'scholar@campus.edu',
-    username: 'alexrivera',
-    name: 'Alex Rivera',
-    studentId: 'CS-2024-889',
-    verificationStatus: VerificationStatus.VERIFIED,
-    status: UserStatus.ACTIVE,
-    creditBalance: 12.0,
-    verificationExpiresAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
-    activeCustomizations: {
-      theme: 'profile_theme_sunrise',
-      banner: 'banner_style_minimal',
-      badge_frame: 'badge_frame_bronze',
-      layout: null,
-      font: null,
-    },
-  },
-  isAuthenticated: true,
+  token: null,
+  user: null,
+  isAuthenticated: false,
   activeThemeKey: 'profile_theme_sunrise',
-  activeBadgeFrameKey: 'badge_frame_bronze',
-  setAuth: (token, user) =>
-    set({
-      token,
+  activeBadgeFrameKey: '',
+  setAuth: (token, user) => {
+    const resolvedToken = token || (user as any)?.token || (user as any)?.accessToken || null;
+    return set({
+      token: resolvedToken,
       user,
-      isAuthenticated: true,
+      isAuthenticated: Boolean(resolvedToken),
       activeThemeKey: user.activeCustomizations?.theme || 'profile_theme_sunrise',
-      activeBadgeFrameKey: user.activeCustomizations?.badge_frame || 'badge_frame_bronze',
-    }),
+      activeBadgeFrameKey: user.activeCustomizations?.badge_frame || '',
+    });
+  },
   updateUser: (partial) =>
     set((state) => ({
       user: state.user ? { ...state.user, ...partial } : null,

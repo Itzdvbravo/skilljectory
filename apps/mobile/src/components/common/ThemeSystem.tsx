@@ -80,8 +80,7 @@ export const AvatarWithBadgeFrame: React.FC<AvatarWithBadgeFrameProps> = ({
   badgeFrameKey,
   style,
 }) => {
-  const globalBadgeFrame = useAuthStore((s) => s.activeBadgeFrameKey);
-  const frame = badgeFrameKey ?? globalBadgeFrame;
+  const frame = badgeFrameKey || null;
 
   const initials = name
     .split(' ')

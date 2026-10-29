@@ -157,6 +157,13 @@ export interface UserProfileDto {
   creditBalance: number;
   totalSessionHours: number;
   sessionsTaughtCount: number;
+  course?: string | null;
+  department?: string | null;
+  enrollmentYear?: number | null;
+  yearsOfStudy?: number | null;
+  currentYear?: number | null;
+  teachSkills?: string[];
+  learnSkills?: string[];
   socialLinks: UserSocialLinkDto[];
   activeCustomizations: Record<CustomizationCategory, string | null>;
   badges: UserBadgeDto[];

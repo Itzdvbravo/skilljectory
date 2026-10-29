@@ -190,6 +190,11 @@ model Profile {
   bio                      String?
   video_url                String?
   avatar_url               String?
+  course                   String?
+  department               String?
+  enrollment_year          Int?
+  years_of_study           Int?
+  current_year             Int?
   resume_export_prefs_json String?  @default("{}")
   created_at               DateTime @default(now())
   updated_at               DateTime @updatedAt

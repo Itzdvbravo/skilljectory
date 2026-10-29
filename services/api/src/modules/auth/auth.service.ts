@@ -18,7 +18,7 @@ export class AuthService {
     const refreshToken = jwt.sign({ sub: userId, email }, REFRESH_SECRET, {
       expiresIn: REFRESH_EXPIRY as any,
     });
-    return { accessToken, refreshToken };
+    return { token: accessToken, accessToken, refreshToken };
   }
 
   static async signup(data: {
@@ -27,15 +27,26 @@ export class AuthService {
     name: string;
     username?: string;
     studentId?: string;
+    course?: string;
+    department?: string;
+    enrollmentYear?: number;
+    yearsOfStudy?: number;
+    currentYear?: number;
+    teachSkills?: string[];
+    learnSkills?: string[];
     verificationMethod?: VerificationMethod;
   }) {
     const cleanEmail = data.email.toLowerCase().trim();
+    if (!cleanEmail.endsWith('@adtu.in')) {
+      throw new BadRequestError('Access restricted: Only official Assam Down Town University (@adtu.in) emails are permitted.');
+    }
+
     const existingEmail = await prisma.user.findUnique({
       where: { email: cleanEmail },
     });
 
     if (existingEmail) {
-      throw new BadRequestError('User with this email already exists');
+      throw new BadRequestError('An account with this @adtu.in email already exists. Please sign in.');
     }
 
     let finalUsername = data.username?.trim().toLowerCase().replace(/^@/, '').replace(/[^a-z0-9_]/g, '');
@@ -54,10 +65,10 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(data.password, 10);
     const method = data.verificationMethod || VerificationMethod.EMAIL;
 
-    // Direct auto-verify (especially for @adtu.in domain as per prompt, no OTP needed)
-    const isAutoVerified = cleanEmail.endsWith('@adtu.in') || true;
-    const verifiedAt = isAutoVerified ? new Date() : null;
-    const expiresAt = isAutoVerified ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) : null;
+    // Direct auto-verify for @adtu.in domain (no OTP required)
+    const isAutoVerified = true;
+    const verifiedAt = new Date();
+    const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
     const user = await prisma.$transaction(async (tx) => {
       const newUser = await tx.user.create({
@@ -75,11 +86,16 @@ export class AuthService {
         },
       });
 
-      // Create linked default profile
+      // Create linked profile with academic details
       await tx.profile.create({
         data: {
           user_id: newUser.id,
-          bio: 'Campus student & peer learner',
+          course: data.course?.trim() || 'B.Tech CSE',
+          department: data.department?.trim() || 'Faculty of Engineering & Technology',
+          enrollment_year: data.enrollmentYear ? Number(data.enrollmentYear) : new Date().getFullYear(),
+          years_of_study: data.yearsOfStudy ? Number(data.yearsOfStudy) : 4,
+          current_year: data.currentYear ? Number(data.currentYear) : 1,
+          bio: `Student of ${data.course?.trim() || 'B.Tech'} at Assam Down Town University. Eager to collaborate, teach, and learn.`,
           resume_export_prefs_json: JSON.stringify({
             showEmail: true,
             showBadges: true,
@@ -88,6 +104,58 @@ export class AuthService {
           }),
         },
       });
+
+      // Tag skills willing to teach
+      if (Array.isArray(data.teachSkills) && data.teachSkills.length > 0) {
+        for (const skillName of data.teachSkills) {
+          if (!skillName || !skillName.trim()) continue;
+          const norm = skillName.trim().toLowerCase();
+          let skill = await tx.skill.findUnique({ where: { name_normalized: norm } });
+          if (!skill) {
+            skill = await tx.skill.create({
+              data: {
+                name_normalized: norm,
+                display_name: skillName.trim(),
+                category: 'Peer Skill',
+              },
+            });
+          }
+          await tx.userSkill.create({
+            data: {
+              user_id: newUser.id,
+              skill_id: skill.id,
+              type: 'teach',
+              proficiency: 'intermediate',
+            },
+          });
+        }
+      }
+
+      // Tag skills wanting to learn
+      if (Array.isArray(data.learnSkills) && data.learnSkills.length > 0) {
+        for (const skillName of data.learnSkills) {
+          if (!skillName || !skillName.trim()) continue;
+          const norm = skillName.trim().toLowerCase();
+          let skill = await tx.skill.findUnique({ where: { name_normalized: norm } });
+          if (!skill) {
+            skill = await tx.skill.create({
+              data: {
+                name_normalized: norm,
+                display_name: skillName.trim(),
+                category: 'Peer Skill',
+              },
+            });
+          }
+          await tx.userSkill.create({
+            data: {
+              user_id: newUser.id,
+              skill_id: skill.id,
+              type: 'learn',
+              proficiency: 'beginner',
+            },
+          });
+        }
+      }
 
       // Claim welcome 3-credit bonus immediately if auto-verified
       if (isAutoVerified) {
@@ -101,20 +169,29 @@ export class AuthService {
     const tokens = this.generateTokens(user.id, user.email);
 
     return {
+      token: tokens.token,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
       user: {
         id: user.id,
         email: user.email,
         username: user.username,
         name: user.name,
+        studentId: user.student_id,
+        course: data.course?.trim() || 'B.Tech CSE',
+        enrollmentYear: data.enrollmentYear ? Number(data.enrollmentYear) : new Date().getFullYear(),
         verificationStatus: refreshedUser?.verification_status || user.verification_status,
         creditBalance: refreshedUser?.credit_balance || 3.0,
       },
-      ...tokens,
     };
   }
 
   static async login(identifier: string, password?: string) {
     const cleanId = (identifier || '').toLowerCase().trim().replace(/^@/, '');
+    if (cleanId.includes('@') && !cleanId.endsWith('@adtu.in')) {
+      throw new BadRequestError('Access restricted: Only official @adtu.in campus student email accounts are permitted.');
+    }
+
     const user = await prisma.user.findFirst({
       where: {
         OR: [
@@ -125,7 +202,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedError('Invalid credentials');
+      throw new UnauthorizedError('Invalid credentials. If you are a new student, please register your @adtu.in account.');
     }
 
     if (password) {
@@ -191,6 +268,13 @@ export class AuthService {
       });
     }
 
+    if (!admin.unlocked_blogging_at) {
+      admin = await prisma.user.update({
+        where: { id: admin.id },
+        data: { unlocked_blogging_at: new Date() },
+      });
+    }
+
     const tokens = this.generateTokens(admin.id, admin.email);
 
     return {
@@ -203,8 +287,15 @@ export class AuthService {
         verificationStatus: admin.verification_status,
         status: admin.status,
         creditBalance: admin.credit_balance,
+        unlockedBloggingAt: (admin.unlocked_blogging_at || new Date()).toISOString(),
+        activeCustomizations: {
+          theme: 'profile_theme_aurora',
+          badge_frame: 'badge_frame_gold',
+        },
       },
-      ...tokens,
+      token: tokens.token,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
     };
   }
 

@@ -40,6 +40,7 @@ import {
   Tag,
   UserCheck,
   Download,
+  Play,
 } from 'lucide-react-native';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
@@ -195,6 +196,32 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
               fetchSessionDetails();
             } catch (err: any) {
               Alert.alert('Cancellation Notice', err.message || 'Could not cancel session.');
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Host Admin: Start Early
+  const handleStartEarly = () => {
+    Alert.alert(
+      'Start Session Early? 🚀',
+      'This will start the session immediately and notify registered participants.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Start Now',
+          onPress: async () => {
+            try {
+              setActionLoading(true);
+              const res = await api.startSessionEarly(session.id);
+              Alert.alert('Session Started! 🚀', res.message || 'The session has started early.');
+              fetchSessionDetails();
+            } catch (err: any) {
+              Alert.alert('Start Early Notice', err.message || 'Could not start session early.');
             } finally {
               setActionLoading(false);
             }
@@ -850,8 +877,20 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
             ))
           )}
 
-          {/* Host Public Announcement */}
-          {!session.announcedPublicly && !sessionCancelled && (
+          {/* Host Start Early */}
+          {!hasStarted && !sessionCancelled && session.status === SessionStatus.SCHEDULED && (
+            <TouchableOpacity
+              style={styles.startEarlyBtn}
+              onPress={handleStartEarly}
+              disabled={actionLoading}
+            >
+              <Play size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.btnText}>Start Session Early 🚀</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Host Public Announcement - Only for public group/multi-mentor sessions */}
+          {!session.announcedPublicly && !sessionCancelled && !session.isPrivate && session.sessionType !== SessionType.ONE_TO_ONE && (
             <TouchableOpacity
               style={styles.announceBtn}
               onPress={handleAnnounce}
@@ -1728,6 +1767,14 @@ const styles = StyleSheet.create({
     color: '#10B981',
     fontSize: 13,
     fontWeight: '600',
+  },
+  startEarlyBtn: {
+    backgroundColor: '#0284C7',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
   },
   announceBtn: {
     backgroundColor: '#7C3AED',

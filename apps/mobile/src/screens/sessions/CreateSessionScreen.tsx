@@ -189,8 +189,8 @@ export const CreateSessionScreen = ({ navigation }: any) => {
         coMentorUsernames:
           sessionType === SessionType.MULTI_MENTOR ? coMentors.map((m) => m.username) : undefined,
         maxParticipants: sessionType !== SessionType.ONE_TO_ONE ? maxParticipants : 1,
-        isPrivate,
-        announcedImmediately: announceToEveryone,
+        isPrivate: sessionType === SessionType.ONE_TO_ONE ? true : isPrivate,
+        announcedImmediately: (sessionType !== SessionType.ONE_TO_ONE && !isPrivate) ? announceToEveryone : false,
       });
 
       const privateMsg = session.joinCode
@@ -202,13 +202,18 @@ export const CreateSessionScreen = ({ navigation }: any) => {
           ? `\n\n📨 Requests sent to ${coMentors.length} co-host(s). They can accept in their 'My Sessions' tab.`
           : '';
 
+      const oneToOneMsg =
+        sessionType === SessionType.ONE_TO_ONE
+          ? `\n\n📨 Mentorship request sent to ${targetLearnerName.trim()}! They can find it in their 'My Sessions' tab.`
+          : '';
+
       Alert.alert(
         'Session Hosted Successfully! 🎓',
         `"${title.trim()}" is scheduled for ${scheduledDate.toLocaleDateString([], {
           weekday: 'short',
           month: 'short',
           day: 'numeric',
-        })} at ${scheduledDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.${privateMsg}${coHostMsg}`,
+        })} at ${scheduledDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.${privateMsg}${coHostMsg}${oneToOneMsg}`,
         [{ text: 'View Sessions', onPress: () => navigation.goBack() }]
       );
     } catch (err: any) {
@@ -482,42 +487,46 @@ export const CreateSessionScreen = ({ navigation }: any) => {
         onLocationAddressChange={setLocationAddress}
       />
 
-      {/* 10. "Announce to Everyone" Option (Requested by User) */}
-      <Text style={styles.sectionLabel}>CAMPUS BULLETIN ANNOUNCEMENT</Text>
-      <TouchableOpacity
-        style={[
-          styles.announceCard,
-          announceToEveryone && styles.announceCardActive,
-        ]}
-        onPress={() => setAnnounceToEveryone(!announceToEveryone)}
-        activeOpacity={0.8}
-      >
-        <View style={styles.announceTopRow}>
-          <View style={styles.announceTitleRow}>
-            <Megaphone
-              size={18}
-              color={announceToEveryone ? '#38BDF8' : '#64748B'}
-              style={{ marginRight: 8 }}
-            />
-            <Text style={styles.announceTitle}>
-              Announce to everyone{' '}
-              <Text style={isAnnouncementFree ? styles.freePill : styles.paidPill}>
-                {isAnnouncementFree ? '(free)' : '(-1 credit)'}
-              </Text>
+      {/* 10. "Announce to Everyone" Option (Only for Public Group / Multi-Mentor Sessions) */}
+      {sessionType !== SessionType.ONE_TO_ONE && !isPrivate && (
+        <>
+          <Text style={styles.sectionLabel}>CAMPUS BULLETIN ANNOUNCEMENT</Text>
+          <TouchableOpacity
+            style={[
+              styles.announceCard,
+              announceToEveryone && styles.announceCardActive,
+            ]}
+            onPress={() => setAnnounceToEveryone(!announceToEveryone)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.announceTopRow}>
+              <View style={styles.announceTitleRow}>
+                <Megaphone
+                  size={18}
+                  color={announceToEveryone ? '#38BDF8' : '#64748B'}
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={styles.announceTitle}>
+                  Announce to everyone{' '}
+                  <Text style={isAnnouncementFree ? styles.freePill : styles.paidPill}>
+                    {isAnnouncementFree ? '(free)' : '(-1 credit)'}
+                  </Text>
+                </Text>
+              </View>
+
+              <View style={[styles.checkbox, announceToEveryone && styles.checkboxActive]}>
+                {announceToEveryone && <CheckCircle size={14} color="#0F172A" />}
+              </View>
+            </View>
+
+            <Text style={styles.announceSubtext}>
+              {isAnnouncementFree
+                ? `⚡ ${freebiesRemaining} freebie${freebiesRemaining === 1 ? '' : 's'} left in your allowance. Next free announcement window opens automatically after cooldown.`
+                : '⏳ Free allowance exhausted or cooldown active. Announcement costs 1 credit from your balance.'}
             </Text>
-          </View>
-
-          <View style={[styles.checkbox, announceToEveryone && styles.checkboxActive]}>
-            {announceToEveryone && <CheckCircle size={14} color="#0F172A" />}
-          </View>
-        </View>
-
-        <Text style={styles.announceSubtext}>
-          {isAnnouncementFree
-            ? `⚡ ${freebiesRemaining} freebie${freebiesRemaining === 1 ? '' : 's'} left in your allowance. Next free announcement window opens automatically after cooldown.`
-            : '⏳ Free allowance exhausted or cooldown active. Announcement costs 1 credit from your balance.'}
-        </Text>
-      </TouchableOpacity>
+          </TouchableOpacity>
+        </>
+      )}
 
       {/* 11. Live Credit Preview */}
       <View style={styles.previewCard}>

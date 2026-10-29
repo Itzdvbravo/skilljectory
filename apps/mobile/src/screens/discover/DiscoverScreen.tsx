@@ -38,7 +38,7 @@ export const DiscoverScreen = ({ navigation }: any) => {
   const [sessions, setSessions] = useState<SessionDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [formatFilter, setFormatFilter] = useState<'all' | 'group' | 'multi' | '1on1'>('all');
+  const [formatFilter, setFormatFilter] = useState<'all' | 'group' | 'multi'>('all');
 
   // Private Code Modal
   const [codeModalOpen, setCodeModalOpen] = useState(false);
@@ -55,78 +55,8 @@ export const DiscoverScreen = ({ navigation }: any) => {
     try {
       setLoading(true);
       // Fetch public discoverable sessions open to all students
-      const data = await api.getSessions('discover', query).catch(() => [
-        {
-          id: 'disc_sess_1',
-          hostId: 'usr_sarah_chen',
-          hostName: 'Sarah Chen',
-          hostAvatar: null,
-          sessionType: SessionType.GROUP,
-          skillId: 'skl_react_native',
-          skillName: 'React Native & Expo Performance Architecture',
-          durationHours: 1.5,
-          status: SessionStatus.SCHEDULED,
-          scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          locationMode: LocationMode.ONLINE,
-          meetingLink: 'https://meet.google.com/campus-rn-workshop',
-          locationAddress: null,
-          minParticipants: 2,
-          maxParticipants: 12,
-          isPrivate: false,
-          joinCode: null,
-          announcedPublicly: true,
-          participantsCount: 4,
-          confirmedAttendanceCount: 0,
-          hasJoined: false,
-        },
-        {
-          id: 'disc_sess_2',
-          hostId: 'usr_marcus_vance',
-          hostName: 'Marcus Vance',
-          hostAvatar: null,
-          sessionType: SessionType.MULTI_MENTOR,
-          skillId: 'skl_postgres',
-          skillName: 'PostgreSQL Distributed Systems & Index Tuning',
-          durationHours: 2.0,
-          status: SessionStatus.SCHEDULED,
-          scheduledAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
-          locationMode: LocationMode.OFFLINE,
-          meetingLink: null,
-          locationAddress: 'Turing Computer Lab 204, East Campus',
-          minParticipants: 2,
-          maxParticipants: 10,
-          isPrivate: false,
-          joinCode: null,
-          announcedPublicly: true,
-          participantsCount: 3,
-          confirmedAttendanceCount: 0,
-          hasJoined: false,
-        },
-        {
-          id: 'disc_sess_3',
-          hostId: 'usr_elena_rostova',
-          hostName: 'Elena Rostova',
-          hostAvatar: null,
-          sessionType: SessionType.GROUP,
-          skillId: 'skl_biochem',
-          skillName: 'Organic Chemistry Reaction Mechanisms',
-          durationHours: 1.5,
-          status: SessionStatus.SCHEDULED,
-          scheduledAt: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
-          locationMode: LocationMode.HYBRID,
-          meetingLink: 'https://meet.google.com/ochem-prep',
-          locationAddress: 'Science Hall 302',
-          minParticipants: 2,
-          maxParticipants: 15,
-          isPrivate: false,
-          joinCode: null,
-          announcedPublicly: true,
-          participantsCount: 8,
-          confirmedAttendanceCount: 0,
-          hasJoined: false,
-        },
-      ]);
-      setSessions(data);
+      const data = await api.getSessions('discover', query).catch(() => []);
+      setSessions(data || []);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -165,10 +95,27 @@ export const DiscoverScreen = ({ navigation }: any) => {
   };
 
   const filteredSessions = sessions.filter((s) => {
-    if (formatFilter === 'group') return s.sessionType === SessionType.GROUP;
-    if (formatFilter === 'multi') return s.sessionType === SessionType.MULTI_MENTOR;
-    if (formatFilter === '1on1') return s.sessionType === SessionType.ONE_TO_ONE;
-    return true;
+    // 1-on-1 direct mentoring and private sessions are excluded from public discovery
+    if (s.sessionType === SessionType.ONE_TO_ONE || s.isPrivate) return false;
+    if (formatFilter === 'group' && s.sessionType !== SessionType.GROUP) return false;
+    if (formatFilter === 'multi' && s.sessionType !== SessionType.MULTI_MENTOR) return false;
+
+    if (!query.trim()) return true;
+    const q = query.toLowerCase().trim();
+    const matchTitle = (s.title || '').toLowerCase().includes(q);
+    const matchSkill = (s.skillName || '').toLowerCase().includes(q);
+    const matchDesc = (s.description || '').toLowerCase().includes(q);
+    const matchHost =
+      (s.hostName || '').toLowerCase().includes(q) ||
+      (s.hostUsername || '').toLowerCase().includes(q);
+    const matchTags = (s.skillsTags || []).some((t) => t.toLowerCase().includes(q));
+    const matchMentors = (s.mentors || []).some(
+      (m) =>
+        (m.name || '').toLowerCase().includes(q) ||
+        (m.username || '').toLowerCase().includes(q)
+    );
+
+    return matchTitle || matchSkill || matchDesc || matchHost || matchTags || matchMentors;
   });
 
   return (
@@ -224,7 +171,6 @@ export const DiscoverScreen = ({ navigation }: any) => {
           { id: 'all', label: 'All Sessions' },
           { id: 'group', label: 'Group Workshops' },
           { id: 'multi', label: 'Multi-Host' },
-          { id: '1on1', label: '1-on-1' },
         ].map((f) => (
           <TouchableOpacity
             key={f.id}

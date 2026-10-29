@@ -12,7 +12,7 @@ import { ShowcaseService } from './modules/showcase/showcase.service.js';
 import { AnalyticsService } from './modules/analytics/analytics.service.js';
 import { BadgesService } from './modules/badges/badges.service.js';
 import { BannersService } from './modules/banners/banners.service.js';
-import { authMiddleware } from './middleware/auth.middleware.js';
+import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.middleware.js';
 import { requireVerifiedUser } from './middleware/verification.middleware.js';
 import { rateLimitSessionCreation } from './middleware/rateLimit.middleware.js';
 
@@ -167,9 +167,13 @@ router.post('/sessions/preview', authMiddleware, async (req: Request, res: Respo
 });
 
 // GET /sessions (scope=discover | my)
-router.get('/sessions', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/sessions', optionalAuthMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const scope = (req.query.scope as 'discover' | 'my') || 'discover';
+    if (scope === 'my' && !req.user) {
+      res.status(401).json({ error: 'Authentication required to view your sessions' });
+      return;
+    }
     const search = req.query.search as string;
     const sessions = await SessionsService.listSessions({
       userId: req.user?.id,
@@ -269,6 +273,16 @@ router.post('/sessions/:id/remove-participant', authMiddleware, requireVerifiedU
 router.post('/sessions/:id/cancel', authMiddleware, requireVerifiedUser, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await SessionsService.cancelSession(req.user!.id, req.params.id);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Host Admin: Start Early
+router.post('/sessions/:id/start-early', authMiddleware, requireVerifiedUser, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await SessionsService.startSessionEarly(req.user!.id, req.params.id);
     res.json(result);
   } catch (err) {
     next(err);
@@ -425,7 +439,7 @@ router.post('/blog/posts/:id/comment', authMiddleware, requireVerifiedUser, asyn
 });
 
 // ================= CUSTOMIZATIONS =================
-router.get('/customizations/catalog', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.get(['/customizations/catalog', '/customizations'], authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const catalog = await CustomizationsService.getCatalog(req.user!.id);
     res.json(catalog);
@@ -443,7 +457,7 @@ router.post('/customizations/:id/unlock', authMiddleware, requireVerifiedUser, a
   }
 });
 
-router.patch('/customizations/:id/activate', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.all('/customizations/:id/activate', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const activated = await CustomizationsService.activate(req.user!.id, req.params.id);
     res.json(activated);

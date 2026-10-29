@@ -52,6 +52,7 @@ import {
   Star,
   MapPin,
   Globe,
+  LogOut,
 } from 'lucide-react-native';
 import { AvatarWithBadgeFrame, useAppTheme } from '../../components/common/ThemeSystem';
 import { SocialLinksEditor } from '../../components/profile/SocialLinksEditor';
@@ -427,6 +428,7 @@ export const ProfileScreen = ({ navigation }: any) => {
   const activeThemeKey = useAuthStore((s) => s.activeThemeKey);
   const activeBadgeFrameKey = useAuthStore((s) => s.activeBadgeFrameKey);
   const setActiveCustomizations = useAuthStore((s) => s.setActiveCustomizations);
+  const logout = useAuthStore((s) => s.logout);
 
   // Main navigation toggle: 'public_view' vs 'settings'
   const [activeMainTab, setActiveMainTab] = useState<'public_view' | 'settings'>('public_view');
@@ -460,47 +462,34 @@ export const ProfileScreen = ({ navigation }: any) => {
       setLoading(true);
       const [userRes, catalogRes, ledgerRes, sessionsRes] = await Promise.all([
         api.getMe().catch(() => ({
-          id: user?.id || 'usr_default_demo_scholar',
-          email: user?.email || 'scholar@campus.edu',
-          name: user?.name || 'Alex Rivera',
-          username: user?.username || 'alexrivera',
-          studentId: user?.studentId || 'CS-2024-889',
+          id: user?.id || 'usr_student',
+          email: user?.email || 'student@adtu.in',
+          name: user?.name || 'ADTU Scholar',
+          username: user?.username || 'scholar',
+          studentId: user?.studentId || null,
+          course: user?.course || 'B.Tech CSE',
+          department: user?.department || 'Faculty of Engineering & Technology',
+          enrollmentYear: user?.enrollmentYear || 2024,
+          yearsOfStudy: user?.yearsOfStudy || 4,
+          currentYear: user?.currentYear || 1,
+          teachSkills: user?.teachSkills || [],
+          learnSkills: user?.learnSkills || [],
           verificationMethod: 'email',
           verificationStatus: 'verified',
           status: 'active',
-          bio: 'Campus peer mentor specializing in React Native, mobile performance, and distributed systems. 20+ hours peer teaching.',
-          creditBalance: user?.creditBalance ?? 12.0,
-          totalSessionHours: 18.5,
-          sessionsTaughtCount: 6,
-          socialLinks: [
-            { id: 'lnk_1', platform: 'github', url: 'https://github.com/alexrivera', displayOrder: 1 },
-            { id: 'lnk_2', platform: 'linkedin', url: 'https://linkedin.com/in/alexrivera', displayOrder: 2 },
-          ],
+          bio: 'Assam Down Town University student & peer learner.',
+          creditBalance: user?.creditBalance ?? 3.0,
+          totalSessionHours: 0.0,
+          sessionsTaughtCount: 0,
+          socialLinks: [],
           activeCustomizations: {
             theme: activeThemeKey || 'profile_theme_sunrise',
             banner: 'banner_style_minimal',
-            badge_frame: activeBadgeFrameKey || 'badge_frame_bronze',
+            badge_frame: activeBadgeFrameKey || null,
             layout: null,
             font: null,
           },
-          badges: [
-            {
-              id: 'bdg_1',
-              badgeId: 'b1',
-              name: 'Mentor Level 2 — Dedicated Scholar',
-              criteriaType: BadgeCriteriaType.HOURS,
-              threshold: 15,
-              earnedAt: new Date().toISOString(),
-            },
-            {
-              id: 'bdg_2',
-              badgeId: 'b2',
-              name: '5-Star Campus Guide',
-              criteriaType: BadgeCriteriaType.RATING,
-              threshold: 4.8,
-              earnedAt: new Date().toISOString(),
-            },
-          ],
+          badges: [],
         })),
         api.getCatalog().catch(() => [
           {
@@ -513,7 +502,7 @@ export const ProfileScreen = ({ navigation }: any) => {
             unlockValue: 0,
             isUnlocked: true,
             isActive: activeThemeKey === 'profile_theme_sunrise',
-            progressValue: 12,
+            progressValue: 0,
           },
           {
             id: 'c2',
@@ -523,21 +512,21 @@ export const ProfileScreen = ({ navigation }: any) => {
             tier: CustomizationTier.BASIC,
             unlockType: CustomizationUnlockType.CREDITS,
             unlockValue: 2,
-            isUnlocked: true,
+            isUnlocked: false,
             isActive: activeThemeKey === 'profile_theme_midnight',
-            progressValue: 12,
+            progressValue: 0,
           },
           {
             id: 'c3',
             key: 'profile_theme_aurora',
             label: 'Aurora Emerald Theme',
             category: CustomizationCategory.THEME,
-            tier: CustomizationTier.BASIC,
-            unlockType: CustomizationUnlockType.CREDITS,
+            tier: CustomizationTier.ADVANCED,
+            unlockType: CustomizationUnlockType.SESSIONS,
             unlockValue: 4,
             isUnlocked: false,
             isActive: activeThemeKey === 'profile_theme_aurora',
-            progressValue: 12,
+            progressValue: 0,
           },
           {
             id: 'c4',
@@ -548,8 +537,8 @@ export const ProfileScreen = ({ navigation }: any) => {
             unlockType: CustomizationUnlockType.CREDITS,
             unlockValue: 0,
             isUnlocked: true,
-            isActive: activeBadgeFrameKey === 'badge_frame_standard',
-            progressValue: 12,
+            isActive: activeBadgeFrameKey === 'badge_frame_standard' || !activeBadgeFrameKey,
+            progressValue: 0,
           },
           {
             id: 'c5',
@@ -559,9 +548,9 @@ export const ProfileScreen = ({ navigation }: any) => {
             tier: CustomizationTier.BASIC,
             unlockType: CustomizationUnlockType.CREDITS,
             unlockValue: 3,
-            isUnlocked: true,
+            isUnlocked: false,
             isActive: activeBadgeFrameKey === 'badge_frame_bronze',
-            progressValue: 12,
+            progressValue: 0,
           },
           {
             id: 'c6',
@@ -569,49 +558,14 @@ export const ProfileScreen = ({ navigation }: any) => {
             label: 'Gold Prestige Crown Frame',
             category: CustomizationCategory.BADGE_FRAME,
             tier: CustomizationTier.ADVANCED,
-            unlockType: CustomizationUnlockType.CREDITS,
-            unlockValue: 8,
+            unlockType: CustomizationUnlockType.SESSIONS,
+            unlockValue: 6,
             isUnlocked: false,
             isActive: activeBadgeFrameKey === 'badge_frame_gold',
-            progressValue: 12,
+            progressValue: 0,
           },
         ]),
-        api.getLedger(20, 0).catch(() => ({
-          items: [
-            {
-              id: 'ledg_1',
-              amount: 3.0,
-              balanceAfter: 12.0,
-              type: LedgerTransactionType.SIGNUP_BONUS,
-              humanReadableReason: 'Welcome verification bonus',
-              createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-            },
-            {
-              id: 'ledg_2',
-              amount: -1.0,
-              balanceAfter: 9.0,
-              type: LedgerTransactionType.SESSION_HOST_COST,
-              humanReadableReason: 'Session announcement / anti-spam fee',
-              createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
-            },
-            {
-              id: 'ledg_3',
-              amount: 4.5,
-              balanceAfter: 13.5,
-              type: LedgerTransactionType.SESSION_EARNING,
-              humanReadableReason: 'React Native performance workshop teaching payout',
-              createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-            },
-            {
-              id: 'ledg_4',
-              amount: 2.0,
-              balanceAfter: 12.0,
-              type: LedgerTransactionType.MONTHLY_REFILL,
-              humanReadableReason: 'Monthly credit stipend (Section 5.7)',
-              createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-            },
-          ],
-        })),
+        api.getLedger(20, 0).catch(() => ({ items: [] })),
         api.getSessions('my').catch(() => []),
       ]);
 
@@ -657,22 +611,19 @@ export const ProfileScreen = ({ navigation }: any) => {
       await api.unlockCustomization(item.id);
       Alert.alert('Unlocked!', `You unlocked ${item.label}.`);
       fetchProfileData();
-    } catch {
-      // Optimistic unlock
-      Alert.alert('Unlocked!', `${item.label} unlocked with credit debit.`);
-      if (item.category === CustomizationCategory.THEME) {
-        handleActivateTheme(item.key);
-      } else {
-        handleActivateBadge(item.key);
-      }
+    } catch (err: any) {
+      Alert.alert('Unlock Notice', err.message || 'Could not complete unlock.');
     } finally {
       setActionLoading(false);
     }
   };
 
-  const currentBalance = profileData?.creditBalance ?? 12.0;
-  const sessionsCount = profileData?.sessionsTaughtCount || 6;
-  const username = profileData?.username || user?.username || 'alexrivera';
+  const isAdmin = user?.username === 'admin' || user?.email === 'admin@adtu.in';
+  const currentBalance = profileData?.creditBalance ?? user?.creditBalance ?? (isAdmin ? 999.0 : 3.0);
+  const sessionsCount = profileData?.sessionsTaughtCount ?? 0;
+  const teachingHours = (profileData?.totalSessionHours ?? 0).toFixed(1);
+  const peerRating = sessionsCount > 0 ? ((profileData as any)?.rating || '4.9') : '—';
+  const username = profileData?.username || user?.username || 'scholar';
 
   return (
     <ScrollView
@@ -709,6 +660,20 @@ export const ProfileScreen = ({ navigation }: any) => {
           <Text style={[styles.topTabText, activeMainTab === 'settings' && styles.topTabTextActive]}>
             Settings & Wallet
           </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.logoutPill}
+          onPress={() => {
+            Alert.alert('Sign Out', 'Do you want to log out of your account?', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Log Out', style: 'destructive', onPress: logout },
+            ]);
+          }}
+          activeOpacity={0.8}
+        >
+          <LogOut size={13} color="#EF4444" style={{ marginRight: 4 }} />
+          <Text style={styles.logoutPillText}>Exit</Text>
         </TouchableOpacity>
       </View>
 
@@ -766,21 +731,21 @@ export const ProfileScreen = ({ navigation }: any) => {
 
               <Text style={styles.heroUsername}>@{username}</Text>
               <Text style={styles.heroStudentId}>
-                Student ID: {profileData?.studentId || 'CS-2024-889'} • B.Tech CSE
+                Student ID: {profileData?.studentId || user?.studentId || 'Assigned on Verification'} • {profileData?.course || user?.course || 'B.Tech CSE'}
               </Text>
             </View>
 
             {/* Bio */}
             <Text style={styles.heroBio}>
               {profileData?.bio ||
-                'Campus peer mentor specializing in React Native, mobile performance, and distributed systems. Passionate about sharing knowledge!'}
+                `Student of ${profileData?.course || user?.course || 'B.Tech'} at Assam Down Town University. Eager to collaborate, teach, and learn.`}
             </Text>
 
             {/* 4-Stat Strip */}
             <View style={styles.statsStrip}>
               <View style={styles.statBox}>
                 <Clock size={16} color="#38BDF8" />
-                <Text style={styles.statNumber}>{profileData?.totalSessionHours || 18.5}h</Text>
+                <Text style={styles.statNumber}>{teachingHours}h</Text>
                 <Text style={styles.statLabel}>Teaching Hours</Text>
               </View>
 
@@ -792,7 +757,7 @@ export const ProfileScreen = ({ navigation }: any) => {
 
               <View style={styles.statBox}>
                 <Star size={16} color="#FBBF24" />
-                <Text style={styles.statNumber}>4.9</Text>
+                <Text style={styles.statNumber}>{peerRating}</Text>
                 <Text style={styles.statLabel}>Peer Rating</Text>
               </View>
 
@@ -811,7 +776,12 @@ export const ProfileScreen = ({ navigation }: any) => {
               <Text style={styles.sectionCardTitle}>TEACHING SKILLS & SPECIALTIES</Text>
             </View>
             <View style={styles.skillsTagWrap}>
-              {['React Native', 'Data Structures', 'PostgreSQL', 'UI/UX Design', 'System Architecture', 'Algorithms'].map((skill, i) => (
+              {(profileData?.teachSkills && profileData.teachSkills.length > 0
+                ? profileData.teachSkills
+                : user?.teachSkills && user.teachSkills.length > 0
+                ? user.teachSkills
+                : ['React Native', 'Data Structures', 'Peer Mentoring']
+              ).map((skill, i) => (
                 <View key={i} style={styles.skillPill}>
                   <Text style={styles.skillPillText}>#{skill}</Text>
                 </View>
@@ -825,27 +795,29 @@ export const ProfileScreen = ({ navigation }: any) => {
               <Award size={16} color="#FBBF24" style={{ marginRight: 6 }} />
               <Text style={styles.sectionCardTitle}>VERIFIED ACADEMIC BADGES</Text>
             </View>
-            <View style={styles.badgesList}>
-              <View style={styles.badgeItem}>
-                <View style={styles.badgeIconCircle}>
-                  <Text style={styles.badgeIconText}>🎖️</Text>
-                </View>
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.badgeName}>Mentor Level 2 — Dedicated Scholar</Text>
-                  <Text style={styles.badgeSub}>Completed 15+ peer teaching hours</Text>
-                </View>
+            {(profileData?.badges || []).length > 0 ? (
+              <View style={styles.badgesList}>
+                {(profileData?.badges || []).map((badge) => (
+                  <View key={badge.id} style={styles.badgeItem}>
+                    <View style={styles.badgeIconCircle}>
+                      <Text style={styles.badgeIconText}>🎖️</Text>
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={styles.badgeName}>{badge.name}</Text>
+                      <Text style={styles.badgeSub}>
+                        Earned: {new Date(badge.earnedAt).toLocaleDateString([], { month: 'short', year: 'numeric' })}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
               </View>
-
-              <View style={styles.badgeItem}>
-                <View style={styles.badgeIconCircle}>
-                  <Text style={styles.badgeIconText}>⭐</Text>
-                </View>
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.badgeName}>5-Star Campus Guide</Text>
-                  <Text style={styles.badgeSub}>Maintained 4.8+ student satisfaction score</Text>
-                </View>
+            ) : (
+              <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+                <Text style={{ color: '#64748B', fontSize: 12, textAlign: 'center' }}>
+                  No badges earned yet. Complete peer sessions and mentor students to earn verified campus badges!
+                </Text>
               </View>
-            </View>
+            )}
           </View>
 
           {/* Social Links */}
@@ -1024,62 +996,122 @@ export const ProfileScreen = ({ navigation }: any) => {
                 </View>
 
                 {/* 2. Midnight OLED */}
-                <View style={styles.customCard}>
-                  <View style={styles.customCardLeft}>
-                    <View style={[styles.colorPreviewDot, { backgroundColor: '#00F0FF' }]} />
-                    <View>
-                      <Text style={styles.customCardName}>Midnight OLED</Text>
-                      <Text style={styles.customCardReq}>2 Credits • Min 2 Sessions</Text>
+                {(() => {
+                  const opt = customizations.find((c) => c.key === 'profile_theme_midnight');
+                  const isUnlocked = isAdmin || Boolean(opt?.isUnlocked);
+                  const canUnlock = currentBalance >= 2;
+
+                  return (
+                    <View style={styles.customCard}>
+                      <View style={styles.customCardLeft}>
+                        <View style={[styles.colorPreviewDot, { backgroundColor: '#00F0FF' }]} />
+                        <View>
+                          <Text style={styles.customCardName}>Midnight OLED</Text>
+                          <Text style={styles.customCardReq}>2 Credits • Basic Tier</Text>
+                        </View>
+                      </View>
+                      {activeThemeKey === 'profile_theme_midnight' ? (
+                        <View style={styles.activePill}>
+                          <Check size={12} color="#10B981" style={{ marginRight: 3 }} />
+                          <Text style={styles.activePillText}>Active</Text>
+                        </View>
+                      ) : isUnlocked ? (
+                        <TouchableOpacity
+                          style={styles.activateBtn}
+                          onPress={() => handleActivateTheme('profile_theme_midnight')}
+                        >
+                          <Text style={styles.activateBtnText}>Activate</Text>
+                        </TouchableOpacity>
+                      ) : canUnlock ? (
+                        <TouchableOpacity
+                          style={[styles.activateBtn, { backgroundColor: '#0284C7' }]}
+                          onPress={() =>
+                            handleUnlockCustomization(
+                              opt || {
+                                id: 'c2',
+                                key: 'profile_theme_midnight',
+                                label: 'Midnight OLED',
+                                category: CustomizationCategory.THEME,
+                                tier: CustomizationTier.BASIC,
+                                unlockType: CustomizationUnlockType.CREDITS,
+                                unlockValue: 2,
+                                isUnlocked: false,
+                                isActive: false,
+                                progressValue: 0,
+                              }
+                            )
+                          }
+                        >
+                          <Text style={styles.activateBtnText}>Unlock (2 cr)</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={styles.lockedPill}>
+                          <Lock size={12} color="#94A3B8" style={{ marginRight: 4 }} />
+                          <Text style={styles.lockedPillText}>Need 2 Credits</Text>
+                        </View>
+                      )}
                     </View>
-                  </View>
-                  {activeThemeKey === 'profile_theme_midnight' ? (
-                    <View style={styles.activePill}>
-                      <Check size={12} color="#10B981" style={{ marginRight: 3 }} />
-                      <Text style={styles.activePillText}>Active</Text>
-                    </View>
-                  ) : sessionsCount >= 2 ? (
-                    <TouchableOpacity
-                      style={styles.activateBtn}
-                      onPress={() => handleActivateTheme('profile_theme_midnight')}
-                    >
-                      <Text style={styles.activateBtnText}>Activate</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={styles.lockedPill}>
-                      <Lock size={12} color="#94A3B8" style={{ marginRight: 4 }} />
-                      <Text style={styles.lockedPillText}>Host 2+ Sessions</Text>
-                    </View>
-                  )}
-                </View>
+                  );
+                })()}
 
                 {/* 3. Aurora Emerald */}
-                <View style={styles.customCard}>
-                  <View style={styles.customCardLeft}>
-                    <View style={[styles.colorPreviewDot, { backgroundColor: '#10B981' }]} />
-                    <View>
-                      <Text style={styles.customCardName}>Aurora Emerald</Text>
-                      <Text style={styles.customCardReq}>4 Credits • Min 4 Sessions</Text>
+                {(() => {
+                  const opt = customizations.find((c) => c.key === 'profile_theme_aurora');
+                  const isUnlocked = isAdmin || Boolean(opt?.isUnlocked);
+                  const canUnlock = sessionsCount >= 4;
+
+                  return (
+                    <View style={styles.customCard}>
+                      <View style={styles.customCardLeft}>
+                        <View style={[styles.colorPreviewDot, { backgroundColor: '#10B981' }]} />
+                        <View>
+                          <Text style={styles.customCardName}>Aurora Emerald</Text>
+                          <Text style={styles.customCardReq}>4 Sessions • Advanced Tier</Text>
+                        </View>
+                      </View>
+                      {activeThemeKey === 'profile_theme_aurora' ? (
+                        <View style={styles.activePill}>
+                          <Check size={12} color="#10B981" style={{ marginRight: 3 }} />
+                          <Text style={styles.activePillText}>Active</Text>
+                        </View>
+                      ) : isUnlocked ? (
+                        <TouchableOpacity
+                          style={styles.activateBtn}
+                          onPress={() => handleActivateTheme('profile_theme_aurora')}
+                        >
+                          <Text style={styles.activateBtnText}>Activate</Text>
+                        </TouchableOpacity>
+                      ) : canUnlock ? (
+                        <TouchableOpacity
+                          style={[styles.activateBtn, { backgroundColor: '#059669' }]}
+                          onPress={() =>
+                            handleUnlockCustomization(
+                              opt || {
+                                id: 'c3',
+                                key: 'profile_theme_aurora',
+                                label: 'Aurora Emerald',
+                                category: CustomizationCategory.THEME,
+                                tier: CustomizationTier.ADVANCED,
+                                unlockType: CustomizationUnlockType.SESSIONS,
+                                unlockValue: 4,
+                                isUnlocked: false,
+                                isActive: false,
+                                progressValue: 0,
+                              }
+                            )
+                          }
+                        >
+                          <Text style={styles.activateBtnText}>Unlock (4 Sessions)</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={styles.lockedPill}>
+                          <Lock size={12} color="#94A3B8" style={{ marginRight: 4 }} />
+                          <Text style={styles.lockedPillText}>Host 4+ Sessions ({sessionsCount}/4)</Text>
+                        </View>
+                      )}
                     </View>
-                  </View>
-                  {activeThemeKey === 'profile_theme_aurora' ? (
-                    <View style={styles.activePill}>
-                      <Check size={12} color="#10B981" style={{ marginRight: 3 }} />
-                      <Text style={styles.activePillText}>Active</Text>
-                    </View>
-                  ) : sessionsCount >= 4 ? (
-                    <TouchableOpacity
-                      style={styles.activateBtn}
-                      onPress={() => handleActivateTheme('profile_theme_aurora')}
-                    >
-                      <Text style={styles.activateBtnText}>Activate</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={styles.lockedPill}>
-                      <Lock size={12} color="#94A3B8" style={{ marginRight: 4 }} />
-                      <Text style={styles.lockedPillText}>Host 4+ Sessions</Text>
-                    </View>
-                  )}
-                </View>
+                  );
+                })()}
               </View>
 
               {/* Section 2: Avatar Badge Frames */}
@@ -1094,7 +1126,7 @@ export const ProfileScreen = ({ navigation }: any) => {
                       <Text style={styles.customCardReq}>Free • Verified Scholar Base</Text>
                     </View>
                   </View>
-                  {activeBadgeFrameKey === 'badge_frame_standard' ? (
+                  {activeBadgeFrameKey === 'badge_frame_standard' || !activeBadgeFrameKey ? (
                     <View style={styles.activePill}>
                       <Check size={12} color="#10B981" style={{ marginRight: 3 }} />
                       <Text style={styles.activePillText}>Active</Text>
@@ -1110,62 +1142,122 @@ export const ProfileScreen = ({ navigation }: any) => {
                 </View>
 
                 {/* Bronze Mentor Frame */}
-                <View style={styles.customCard}>
-                  <View style={styles.customCardLeft}>
-                    <View style={[styles.framePreviewCircle, { borderColor: '#CD7F32' }]} />
-                    <View>
-                      <Text style={styles.customCardName}>Bronze Mentor Frame</Text>
-                      <Text style={styles.customCardReq}>3 Credits • Min 3 Sessions</Text>
+                {(() => {
+                  const opt = customizations.find((c) => c.key === 'badge_frame_bronze');
+                  const isUnlocked = isAdmin || Boolean(opt?.isUnlocked);
+                  const canUnlock = currentBalance >= 3;
+
+                  return (
+                    <View style={styles.customCard}>
+                      <View style={styles.customCardLeft}>
+                        <View style={[styles.framePreviewCircle, { borderColor: '#CD7F32' }]} />
+                        <View>
+                          <Text style={styles.customCardName}>Bronze Mentor Frame</Text>
+                          <Text style={styles.customCardReq}>3 Credits • Basic Tier</Text>
+                        </View>
+                      </View>
+                      {activeBadgeFrameKey === 'badge_frame_bronze' ? (
+                        <View style={styles.activePill}>
+                          <Check size={12} color="#10B981" style={{ marginRight: 3 }} />
+                          <Text style={styles.activePillText}>Active</Text>
+                        </View>
+                      ) : isUnlocked ? (
+                        <TouchableOpacity
+                          style={styles.activateBtn}
+                          onPress={() => handleActivateBadge('badge_frame_bronze')}
+                        >
+                          <Text style={styles.activateBtnText}>Activate</Text>
+                        </TouchableOpacity>
+                      ) : canUnlock ? (
+                        <TouchableOpacity
+                          style={[styles.activateBtn, { backgroundColor: '#CD7F32' }]}
+                          onPress={() =>
+                            handleUnlockCustomization(
+                              opt || {
+                                id: 'c5',
+                                key: 'badge_frame_bronze',
+                                label: 'Bronze Mentor Frame',
+                                category: CustomizationCategory.BADGE_FRAME,
+                                tier: CustomizationTier.BASIC,
+                                unlockType: CustomizationUnlockType.CREDITS,
+                                unlockValue: 3,
+                                isUnlocked: false,
+                                isActive: false,
+                                progressValue: 0,
+                              }
+                            )
+                          }
+                        >
+                          <Text style={styles.activateBtnText}>Unlock (3 cr)</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={styles.lockedPill}>
+                          <Lock size={12} color="#94A3B8" style={{ marginRight: 4 }} />
+                          <Text style={styles.lockedPillText}>Need 3 Credits</Text>
+                        </View>
+                      )}
                     </View>
-                  </View>
-                  {activeBadgeFrameKey === 'badge_frame_bronze' ? (
-                    <View style={styles.activePill}>
-                      <Check size={12} color="#10B981" style={{ marginRight: 3 }} />
-                      <Text style={styles.activePillText}>Active</Text>
-                    </View>
-                  ) : sessionsCount >= 3 ? (
-                    <TouchableOpacity
-                      style={styles.activateBtn}
-                      onPress={() => handleActivateBadge('badge_frame_bronze')}
-                    >
-                      <Text style={styles.activateBtnText}>Activate</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={styles.lockedPill}>
-                      <Lock size={12} color="#94A3B8" style={{ marginRight: 4 }} />
-                      <Text style={styles.lockedPillText}>Host 3+ Sessions</Text>
-                    </View>
-                  )}
-                </View>
+                  );
+                })()}
 
                 {/* Gold Prestige Crown Frame */}
-                <View style={styles.customCard}>
-                  <View style={styles.customCardLeft}>
-                    <View style={[styles.framePreviewCircle, { borderColor: '#F59E0B' }]} />
-                    <View>
-                      <Text style={styles.customCardName}>Gold Prestige Crown 👑</Text>
-                      <Text style={styles.customCardReq}>8 Credits • Min 6 Sessions Hosted</Text>
+                {(() => {
+                  const opt = customizations.find((c) => c.key === 'badge_frame_gold');
+                  const isUnlocked = isAdmin || Boolean(opt?.isUnlocked);
+                  const canUnlock = sessionsCount >= 6;
+
+                  return (
+                    <View style={styles.customCard}>
+                      <View style={styles.customCardLeft}>
+                        <View style={[styles.framePreviewCircle, { borderColor: '#F59E0B' }]} />
+                        <View>
+                          <Text style={styles.customCardName}>Gold Prestige Crown 👑</Text>
+                          <Text style={styles.customCardReq}>6 Sessions Hosted • Master Tier</Text>
+                        </View>
+                      </View>
+                      {activeBadgeFrameKey === 'badge_frame_gold' ? (
+                        <View style={styles.activePill}>
+                          <Check size={12} color="#10B981" style={{ marginRight: 3 }} />
+                          <Text style={styles.activePillText}>Active</Text>
+                        </View>
+                      ) : isUnlocked ? (
+                        <TouchableOpacity
+                          style={[styles.activateBtn, { backgroundColor: '#F59E0B' }]}
+                          onPress={() => handleActivateBadge('badge_frame_gold')}
+                        >
+                          <Text style={[styles.activateBtnText, { color: '#000000' }]}>Activate</Text>
+                        </TouchableOpacity>
+                      ) : canUnlock ? (
+                        <TouchableOpacity
+                          style={[styles.activateBtn, { backgroundColor: '#F59E0B' }]}
+                          onPress={() =>
+                            handleUnlockCustomization(
+                              opt || {
+                                id: 'c6',
+                                key: 'badge_frame_gold',
+                                label: 'Gold Prestige Crown Frame',
+                                category: CustomizationCategory.BADGE_FRAME,
+                                tier: CustomizationTier.ADVANCED,
+                                unlockType: CustomizationUnlockType.SESSIONS,
+                                unlockValue: 6,
+                                isUnlocked: false,
+                                isActive: false,
+                                progressValue: 0,
+                              }
+                            )
+                          }
+                        >
+                          <Text style={[styles.activateBtnText, { color: '#000000' }]}>Unlock (6 Sessions)</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={styles.lockedPill}>
+                          <Lock size={12} color="#94A3B8" style={{ marginRight: 4 }} />
+                          <Text style={styles.lockedPillText}>Host 6+ Sessions ({sessionsCount}/6)</Text>
+                        </View>
+                      )}
                     </View>
-                  </View>
-                  {activeBadgeFrameKey === 'badge_frame_gold' ? (
-                    <View style={styles.activePill}>
-                      <Check size={12} color="#10B981" style={{ marginRight: 3 }} />
-                      <Text style={styles.activePillText}>Active</Text>
-                    </View>
-                  ) : sessionsCount >= 6 ? (
-                    <TouchableOpacity
-                      style={[styles.activateBtn, { backgroundColor: '#F59E0B' }]}
-                      onPress={() => handleActivateBadge('badge_frame_gold')}
-                    >
-                      <Text style={[styles.activateBtnText, { color: '#000000' }]}>Activate</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={styles.lockedPill}>
-                      <Lock size={12} color="#94A3B8" style={{ marginRight: 4 }} />
-                      <Text style={styles.lockedPillText}>Host 6+ Sessions ({sessionsCount}/6)</Text>
-                    </View>
-                  )}
-                </View>
+                  );
+                })()}
               </View>
             </View>
           )}
@@ -1500,6 +1592,23 @@ const styles = StyleSheet.create({
   },
   topTabTextActive: {
     color: '#38BDF8',
+  },
+  logoutPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    marginLeft: 4,
+  },
+  logoutPillText: {
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '700',
   },
   // Public Profile View
   publicViewContainer: {

@@ -175,8 +175,10 @@ export class SessionsService {
     }
     data.skillId = skill.id;
 
-    const isPrivate = Boolean(data.isPrivate);
-    const joinCode = isPrivate ? `CAMP-${Math.floor(1000 + Math.random() * 9000)}` : null;
+    const isPrivate = data.sessionType === SessionType.one_to_one ? true : Boolean(data.isPrivate);
+    const joinCode = (isPrivate && data.sessionType !== SessionType.one_to_one)
+      ? `CAMP-${Math.floor(1000 + Math.random() * 9000)}`
+      : null;
 
     return await prisma.$transaction(async (tx) => {
       let createdSession: any;
@@ -332,7 +334,37 @@ export class SessionsService {
           referenceId: createdSession.id,
         });
       } else {
-        // 1:1 Session
+        // 1:1 Session - Verify target student exists in DB
+        const rawTarget = (data.targetLearnerName || '').trim();
+        if (!rawTarget) {
+          throw new BadRequestError('1-on-1 session requires specifying a student (@username, email, or full name).');
+        }
+
+        const cleanTarget = rawTarget.toLowerCase().replace(/^@/, '');
+        const targetUser = await tx.user.findFirst({
+          where: {
+            OR: [
+              { username: { equals: cleanTarget, mode: 'insensitive' } },
+              { email: { equals: cleanTarget, mode: 'insensitive' } },
+              { id: cleanTarget },
+              { name: { equals: rawTarget, mode: 'insensitive' } },
+            ],
+          },
+          select: { id: true, name: true, username: true, email: true },
+        });
+
+        if (!targetUser) {
+          throw new BadRequestError(
+            `Student "${rawTarget}" does not exist in the campus database. Please verify their username or email.`
+          );
+        }
+
+        if (targetUser.id === hostId) {
+          throw new BadRequestError('You cannot host a 1-on-1 session with yourself as the student.');
+        }
+
+        const formattedLearnerName = `${targetUser.name}${targetUser.username ? ` (@${targetUser.username})` : ''}`;
+
         createdSession = await tx.session.create({
           data: {
             host_id: hostId,
@@ -341,7 +373,7 @@ export class SessionsService {
             title: data.title?.trim() || null,
             description: data.description?.trim() || null,
             skills_tags: skillsTags.length > 0 ? skillsTags : [skill.display_name],
-            target_learner_name: data.targetLearnerName?.trim() || null,
+            target_learner_name: formattedLearnerName,
             duration_hours: data.durationHours,
             scheduled_at: data.scheduledAt,
             location_mode: data.locationMode,
@@ -349,15 +381,42 @@ export class SessionsService {
             location_address: data.locationAddress?.trim() || null,
             min_participants: 1,
             max_participants: 1,
-            is_private: false,
+            is_private: true,
             join_code: null,
             status: SessionStatus.scheduled,
           },
         });
+
+        // Add the target student as a registered session participant
+        await tx.sessionParticipant.create({
+          data: {
+            session_id: createdSession.id,
+            user_id: targetUser.id,
+            role: ParticipantRole.learner,
+            attendance_confirmed: false,
+          },
+        });
+
+        const hostUser = await tx.user.findUnique({
+          where: { id: hostId },
+          select: { name: true, username: true },
+        });
+
+        // Send mentorship request notification to the student
+        await tx.notification.create({
+          data: {
+            user_id: targetUser.id,
+            type: NotificationType.session_milestone,
+            reference_type: 'one_to_one_invitation',
+            reference_id: createdSession.id,
+            title: '1-on-1 Mentorship Request 🎓',
+            body: `${hostUser?.name || 'A mentor'} (@${hostUser?.username || 'mentor'}) scheduled a 1-on-1 session "${data.title || skill.display_name}" with you!`,
+          },
+        });
       }
 
-      // Handle Immediate Public Announcement if selected by host
-      if (data.announcedImmediately) {
+      // Handle Immediate Public Announcement if selected by host (disabled for 1-on-1 and private sessions)
+      if (data.announcedImmediately && data.sessionType !== SessionType.one_to_one && !isPrivate) {
         const user = await tx.user.findUnique({
           where: { id: hostId },
           select: {
@@ -407,7 +466,7 @@ export class SessionsService {
 
   /**
    * Join a session as a learner
-   * Allowed only when the session hasn't started yet, has available capacity, and with valid join code if private
+   * Allowed for scheduled or in-progress sessions before conclusion, with valid capacity and join code if private
    */
   static async joinSession(userId: string, sessionId: string, joinCode?: string) {
     const session = await prisma.session.findUnique({
@@ -416,16 +475,17 @@ export class SessionsService {
     });
 
     if (!session) throw new NotFoundError('Session not found');
-    if (session.status !== SessionStatus.scheduled) {
-      throw new BadRequestError('Can only join scheduled sessions');
+    if (session.status !== SessionStatus.scheduled && session.status !== SessionStatus.in_progress) {
+      throw new BadRequestError('Can only join scheduled or in-progress sessions');
     }
     if (session.host_id === userId) {
       throw new BadRequestError('Host cannot join their own session as learner');
     }
 
-    // Only allow joining before the session starts
-    if (Date.now() >= session.scheduled_at.getTime()) {
-      throw new BadRequestError('Cannot join: this event has already started or concluded.');
+    // Only allow joining before the session concludes
+    const scheduledEndTime = session.scheduled_at.getTime() + (session.duration_hours || 1) * 3600 * 1000;
+    if (Date.now() >= scheduledEndTime) {
+      throw new BadRequestError('Cannot join: this event has already concluded.');
     }
 
     // Check maximum capacity
@@ -436,7 +496,12 @@ export class SessionsService {
 
     // Check private session join code
     if (session.is_private) {
-      if (!joinCode || joinCode.trim().toUpperCase() !== session.join_code?.trim().toUpperCase()) {
+      const inputCode = joinCode?.trim().toUpperCase();
+      const sessionCode = session.join_code?.trim().toUpperCase();
+      const inputDigits = inputCode?.replace(/^CAMP-?/i, '');
+      const sessionDigits = sessionCode?.replace(/^CAMP-?/i, '');
+
+      if (!inputCode || (inputCode !== sessionCode && (!inputDigits || inputDigits !== sessionDigits))) {
         throw new BadRequestError('This is a private session. A valid joining code is required.');
       }
     }
@@ -464,10 +529,14 @@ export class SessionsService {
       throw new BadRequestError('Join code is required');
     }
 
+    const raw = joinCode.trim().toUpperCase();
+    const cleanNum = raw.replace(/^CAMP-?/i, '');
+    const codeCandidates = [raw, `CAMP-${cleanNum}`, cleanNum];
+
     const session = await prisma.session.findFirst({
       where: {
-        join_code: joinCode.trim().toUpperCase(),
-        status: SessionStatus.scheduled,
+        join_code: { in: codeCandidates, mode: 'insensitive' },
+        status: { in: [SessionStatus.scheduled, SessionStatus.in_progress] },
       },
     });
 
@@ -534,6 +603,65 @@ export class SessionsService {
       success: true,
       session: cancelled,
       message: 'Session has been cancelled.',
+    };
+  }
+
+  /**
+   * Host Admin: Start session early (switches status to in_progress and updates scheduled_at to now)
+   */
+  static async startSessionEarly(hostId: string, sessionId: string) {
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: {
+        host: { select: { id: true, name: true, username: true } },
+        participants: { select: { user_id: true } },
+        mentors: { select: { mentor_id: true } },
+      },
+    });
+
+    if (!session) throw new NotFoundError('Session not found');
+    if (session.host_id !== hostId) {
+      throw new ForbiddenError('Only the host can start this session early');
+    }
+
+    if (session.status !== SessionStatus.scheduled) {
+      throw new BadRequestError(`Cannot start early: session status is already ${session.status}`);
+    }
+
+    const updated = await prisma.session.update({
+      where: { id: sessionId },
+      data: {
+        status: SessionStatus.in_progress,
+        scheduled_at: new Date(),
+      },
+    });
+
+    // Notify registered participants and co-mentors
+    const recipientIds = new Set<string>();
+    session.participants.forEach((p) => {
+      if (p.user_id !== hostId) recipientIds.add(p.user_id);
+    });
+    session.mentors.forEach((m) => {
+      if (m.mentor_id !== hostId) recipientIds.add(m.mentor_id);
+    });
+
+    for (const rId of recipientIds) {
+      await prisma.notification.create({
+        data: {
+          user_id: rId,
+          type: NotificationType.session_milestone,
+          reference_type: 'session_started_early',
+          reference_id: session.id,
+          title: 'Session Started Early! 🚀',
+          body: `Host ${session.host?.name || 'Mentor'} has started "${session.title || 'your session'}" early. You can join now!`,
+        },
+      }).catch(() => {});
+    }
+
+    return {
+      success: true,
+      session: updated,
+      message: 'Session has started early! Status changed to in-progress.',
     };
   }
 
@@ -621,20 +749,32 @@ export class SessionsService {
         { participants: { some: { user_id: userId } } },
       ];
     } else {
-      // Discover scope: public sessions open for everyone
+      // Discover scope: public sessions open for everyone (excluding 1-on-1 private mentoring)
       where.is_private = false;
+      where.session_type = { not: SessionType.one_to_one };
       where.status = { in: [SessionStatus.scheduled, SessionStatus.in_progress] };
     }
 
     if (search && search.trim()) {
-      const q = search.trim().toLowerCase();
-      where.OR = [
+      const q = search.trim();
+      const searchConditions: any[] = [
         { skill: { display_name: { contains: q, mode: 'insensitive' } } },
         { title: { contains: q, mode: 'insensitive' } },
         { description: { contains: q, mode: 'insensitive' } },
         { host: { name: { contains: q, mode: 'insensitive' } } },
         { host: { username: { contains: q, mode: 'insensitive' } } },
+        { skills_tags: { has: q } },
       ];
+
+      if (where.OR) {
+        where.AND = [
+          { OR: where.OR },
+          { OR: searchConditions },
+        ];
+        delete where.OR;
+      } else {
+        where.OR = searchConditions;
+      }
     }
 
     const sessions = await prisma.session.findMany({

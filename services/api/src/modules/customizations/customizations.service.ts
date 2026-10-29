@@ -17,8 +17,12 @@ export class CustomizationsService {
    * Section 8.2: Catalog with lock state and progress preview for the current user
    */
   static async getCatalog(userId: string) {
-    const [options, userCustomizations, userBalance, completedSessionsCount] =
+    const [user, options, userCustomizations, userBalance, completedSessionsCount] =
       await Promise.all([
+        prisma.user.findUnique({
+          where: { id: userId },
+          select: { username: true, email: true },
+        }),
         prisma.customizationOption.findMany({
           orderBy: [{ category: 'asc' }, { tier: 'asc' }],
         }),
@@ -34,20 +38,24 @@ export class CustomizationsService {
         }),
       ]);
 
+    const isAdmin = user?.username === 'admin' || user?.email === 'admin@adtu.in';
+
     const unlockedMap = new Map<string, { active: boolean }>();
     userCustomizations.forEach((uc) => {
       unlockedMap.set(uc.customization_option_id, { active: uc.active });
     });
 
     return options.map((opt) => {
-      const isUnlocked = unlockedMap.has(opt.id);
-      const isActive = unlockedMap.get(opt.id)?.active || false;
+      // Free default items (unlock_value 0) or admin accounts have everything unlocked
+      const isDefaultFree = opt.unlock_value === 0;
+      const isUnlocked = isAdmin || isDefaultFree || unlockedMap.has(opt.id);
+      const isActive = unlockedMap.get(opt.id)?.active || (isAdmin && (opt.key === 'badge_frame_gold' || opt.key === 'profile_theme_aurora')) || false;
 
       let progressValue = 0;
       if (opt.unlock_type === CustomizationUnlockType.credits) {
-        progressValue = userBalance;
+        progressValue = isAdmin ? 999 : userBalance;
       } else {
-        progressValue = completedSessionsCount;
+        progressValue = isAdmin ? 25 : completedSessionsCount;
       }
 
       return {
@@ -165,11 +173,36 @@ export class CustomizationsService {
       },
     });
 
-    if (!unlocked) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { username: true, email: true },
+    });
+    const isAdmin = user?.username === 'admin' || user?.email === 'admin@adtu.in';
+
+    if (!unlocked && !isAdmin && target.unlock_value > 0) {
       throw new ForbiddenError('You must unlock this customization before activating it');
     }
 
     return await prisma.$transaction(async (tx) => {
+      // Ensure record exists if admin or default free
+      if (!unlocked) {
+        await tx.userCustomization.upsert({
+          where: {
+            user_id_customization_option_id: {
+              user_id: userId,
+              customization_option_id: optionId,
+            },
+          },
+          update: {},
+          create: {
+            user_id: userId,
+            customization_option_id: optionId,
+            active: false,
+          },
+        });
+      }
+
+      // Deactivate all options in same category for user
       // Deactivate all options in same category for user
       const categoryOptions = await tx.customizationOption.findMany({
         where: { category: target.category },
