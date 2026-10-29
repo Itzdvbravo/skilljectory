@@ -6,7 +6,8 @@
     "start": "adb reverse tcp:4000 tcp:4000 2>nul || exit 0 & expo start",
     "android": "adb reverse tcp:4000 tcp:4000 2>nul || exit 0 & expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build:apk": "eas build --platform android --profile preview"
   },
   "dependencies": {
     "@expo/metro-runtime": "~3.2.3",

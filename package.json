@@ -13,7 +13,8 @@
     "test": "npm run --workspaces test --if-present",
     "test:credits": "npm run --workspace=services/api test:credits",
     "api:dev": "npm run --workspace=services/api dev",
-    "mobile:start": "npm run --workspace=apps/mobile start"
+    "mobile:start": "npm run --workspace=apps/mobile start",
+    "mobile:build:apk": "npm run --workspace=apps/mobile build:apk"
   },
   "keywords": [
     "campus",

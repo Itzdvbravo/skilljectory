@@ -15,8 +15,12 @@ import {
 import Constants from 'expo-constants';
 
 function getCandidateHosts(): string[] {
-  // If a cloud URL (like Vercel) is configured in environment, prioritize it
-  const remoteApi = process.env.EXPO_PUBLIC_API_URL;
+  // If a cloud URL (like Vercel) is configured in environment or app.json, prioritize it
+  const remoteApi =
+    process.env.EXPO_PUBLIC_API_URL ||
+    Constants.expoConfig?.extra?.apiUrl ||
+    (Constants as any).manifest?.extra?.apiUrl;
+
   if (remoteApi) {
     return [remoteApi.trim()];
   }
