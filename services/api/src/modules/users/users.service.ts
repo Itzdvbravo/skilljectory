@@ -53,6 +53,10 @@ export class UsersService {
       activeCustomizations[c.option.category] = c.option.key;
     });
 
+    if (!activeCustomizations.theme) {
+      activeCustomizations.theme = 'profile_theme_sunrise';
+    }
+
     if (isAdmin && !activeCustomizations.badge_frame) {
       activeCustomizations.badge_frame = 'badge_frame_gold';
       activeCustomizations.theme = 'profile_theme_aurora';
@@ -162,7 +166,7 @@ export class UsersService {
   }
 
   static async searchMentors(query?: string) {
-    const q = (query || '').toLowerCase().trim().replace(/^@/, '');
+    const q = (query || '').toLowerCase().trim().replace(/^@+/, '');
     const where: any = {
       status: 'active',
     };

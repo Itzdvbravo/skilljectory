@@ -1106,6 +1106,8 @@ export class SessionsService {
 
     if (search && search.trim()) {
       const q = search.trim();
+      const cleanUserQuery = q.replace(/^@+/, '').trim();
+
       const searchConditions: any[] = [
         { skill: { display_name: { contains: q, mode: 'insensitive' } } },
         { title: { contains: q, mode: 'insensitive' } },
@@ -1114,6 +1116,52 @@ export class SessionsService {
         { host: { username: { contains: q, mode: 'insensitive' } } },
         { skills_tags: { has: q } },
       ];
+
+      if (cleanUserQuery && cleanUserQuery !== q) {
+        searchConditions.push(
+          { host: { name: { contains: cleanUserQuery, mode: 'insensitive' } } },
+          { host: { username: { contains: cleanUserQuery, mode: 'insensitive' } } },
+          { skill: { display_name: { contains: cleanUserQuery, mode: 'insensitive' } } },
+          { title: { contains: cleanUserQuery, mode: 'insensitive' } },
+          { skills_tags: { has: cleanUserQuery } },
+        );
+      }
+
+      const targetUserQuery = cleanUserQuery || q;
+      if (targetUserQuery) {
+        // Co-mentors by name or username
+        searchConditions.push({
+          mentors: {
+            some: {
+              mentor: {
+                OR: [
+                  { name: { contains: targetUserQuery, mode: 'insensitive' } },
+                  { username: { contains: targetUserQuery, mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        });
+
+        // Participants by name or username
+        searchConditions.push({
+          participants: {
+            some: {
+              user: {
+                OR: [
+                  { name: { contains: targetUserQuery, mode: 'insensitive' } },
+                  { username: { contains: targetUserQuery, mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        });
+
+        // Target learner name
+        searchConditions.push({
+          target_learner_name: { contains: targetUserQuery, mode: 'insensitive' },
+        });
+      }
 
       if (where.OR) {
         where.AND = [

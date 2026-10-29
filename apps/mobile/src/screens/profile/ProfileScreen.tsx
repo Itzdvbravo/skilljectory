@@ -23,6 +23,7 @@ import {
   CreditLedgerDto,
   LedgerTransactionType,
   SessionDto,
+  SessionStatus,
 } from '@skill-exchange/shared-types';
 import {
   ShieldCheck,
@@ -56,6 +57,7 @@ import {
 import { AvatarWithBadgeFrame, BrandUnderline, useAppTheme } from '../../components/common/ThemeSystem';
 import { SocialLinksEditor } from '../../components/profile/SocialLinksEditor';
 import { saveOrSharePng } from '../../services/exportImage';
+import Svg, { Defs, LinearGradient as SvgGradient, Stop, Rect, Circle, Path } from 'react-native-svg';
 
 // Resume Style Palettes & Customization Types
 export type ResumeThemeKey = 'cyan' | 'gold' | 'emerald' | 'indigo';
@@ -457,6 +459,7 @@ export const ProfileScreen = ({ navigation }: any) => {
   const activeBadgeFrameKey = useAuthStore((s) => s.activeBadgeFrameKey);
   const setActiveCustomizations = useAuthStore((s) => s.setActiveCustomizations);
   const logout = useAuthStore((s) => s.logout);
+  const theme = useAppTheme();
 
   // Main navigation toggle: 'public_view' vs 'settings'
   const [activeMainTab, setActiveMainTab] = useState<'public_view' | 'settings'>('public_view');
@@ -601,6 +604,13 @@ export const ProfileScreen = ({ navigation }: any) => {
       setCustomizations(catalogRes);
       setLedger(Array.isArray(ledgerRes?.items) ? ledgerRes.items : (Array.isArray(ledgerRes) ? ledgerRes : []));
       setMySessions(sessionsRes || []);
+
+      if ((userRes as any)?.activeCustomizations?.theme) {
+        setActiveCustomizations(
+          (userRes as any).activeCustomizations.theme,
+          (userRes as any).activeCustomizations.badge_frame || activeBadgeFrameKey
+        );
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -623,13 +633,33 @@ export const ProfileScreen = ({ navigation }: any) => {
     }
   };
 
-  const handleActivateTheme = (themeKey: string) => {
+  const handleActivateTheme = async (themeKey: string) => {
     setActiveCustomizations(themeKey, activeBadgeFrameKey);
-    Alert.alert('Theme Updated', `Active theme changed.`);
+    const opt = customizations.find((c) => c.key === themeKey);
+    const targetId = opt?.id || themeKey;
+    try {
+      await api.activateCustomization(targetId);
+    } catch (err: any) {
+      console.warn('Backend theme activate notice:', err?.message);
+    }
+    const themeName =
+      themeKey === 'profile_theme_midnight'
+        ? 'Midnight OLED'
+        : themeKey === 'profile_theme_aurora'
+        ? 'Aurora Emerald'
+        : 'Sunrise Horizon';
+    Alert.alert('Theme Activated! ✨', `Switched active theme to ${themeName}.`);
   };
 
-  const handleActivateBadge = (badgeKey: string) => {
+  const handleActivateBadge = async (badgeKey: string) => {
     setActiveCustomizations(activeThemeKey, badgeKey);
+    const opt = customizations.find((c) => c.key === badgeKey);
+    const targetId = opt?.id || badgeKey;
+    try {
+      await api.activateCustomization(targetId);
+    } catch (err: any) {
+      console.warn('Backend badge activate notice:', err?.message);
+    }
     Alert.alert('Badge Frame Updated', `Active avatar frame changed.`);
   };
 
@@ -713,13 +743,40 @@ export const ProfileScreen = ({ navigation }: any) => {
       {activeMainTab === 'public_view' && (
         <View style={styles.publicViewContainer}>
           {/* Cover & Identity Card */}
-          <View style={styles.profileHeroCard}>
-            {/* Top Cover Banner */}
-            <View style={styles.coverBanner}>
-              <View style={styles.universityBadge}>
-                <Text style={styles.universityBadgeText}>ASSAM DOWN TOWN UNIVERSITY</Text>
+          <View style={[styles.profileHeroCard, { backgroundColor: theme.heroCardBg, borderColor: theme.heroBorder }]}>
+            {/* Top Cover Banner (Increased Height & Active Theme Palette) */}
+            <View style={[styles.coverBanner, { backgroundColor: theme.bannerBg }]}>
+              {/* Decorative Theme Graphics Layer */}
+              <View style={styles.bannerDecorLayer} pointerEvents="none">
+                <Svg width="100%" height={165} viewBox="0 0 400 165">
+                  <Defs>
+                    <SvgGradient id="profileBannerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <Stop offset="0%" stopColor={theme.bannerGradient[0] || theme.bannerBg} stopOpacity="0.95" />
+                      <Stop offset="50%" stopColor={theme.bannerGradient[1] || theme.primary} stopOpacity="0.85" />
+                      <Stop offset="100%" stopColor={theme.bannerGradient[2] || theme.secondary} stopOpacity="0.95" />
+                    </SvgGradient>
+                  </Defs>
+                  <Rect width="100%" height="165" fill="url(#profileBannerGrad)" />
+                  <Circle cx="350" cy="25" r="75" fill={theme.bannerAccent} opacity={0.14} />
+                  <Circle cx="385" cy="75" r="115" fill={theme.bannerAccent} opacity={0.08} />
+                  <Path d="M -20 125 Q 90 75, 190 105 T 390 85 T 440 120" stroke={theme.bannerAccent} strokeWidth={1.5} opacity={0.25} fill="none" />
+                </Svg>
               </View>
-              <Text style={styles.departmentBadgeText}>Faculty of Engineering & CS</Text>
+
+              <View style={styles.bannerContentWrap}>
+                <View style={styles.bannerTopLine}>
+                  <View style={[styles.universityBadge, { backgroundColor: 'rgba(0, 0, 0, 0.32)', borderColor: theme.bannerAccent + '40', borderWidth: 1 }]}>
+                    <Text style={[styles.universityBadgeText, { color: theme.bannerAccent }]}>ASSAM DOWN TOWN UNIVERSITY</Text>
+                  </View>
+                  <View style={[styles.themeIndicatorPill, { backgroundColor: 'rgba(0, 0, 0, 0.28)', borderColor: theme.bannerAccent + '50' }]}>
+                    <Sparkles size={11} color={theme.bannerAccent} style={{ marginRight: 4 }} />
+                    <Text style={[styles.themeIndicatorText, { color: theme.bannerAccent }]}>{theme.name.toUpperCase()}</Text>
+                  </View>
+                </View>
+                <Text style={[styles.departmentBadgeText, { color: theme.bannerSubText }]}>
+                  Faculty of Engineering & CS • Peer Academic Network
+                </Text>
+              </View>
             </View>
 
             {/* Profile Avatar & Top Action Row */}
@@ -734,17 +791,20 @@ export const ProfileScreen = ({ navigation }: any) => {
 
               <View style={styles.actionBtnRow}>
                 {/* Share Tab / Button */}
-                <TouchableOpacity style={styles.heroShareBtn} onPress={handleShareProfile}>
-                  <Share2 size={15} color="#38BDF8" style={{ marginRight: 6 }} />
-                  <Text style={styles.heroShareBtnText}>Share Profile</Text>
+                <TouchableOpacity
+                  style={[styles.heroShareBtn, { borderColor: theme.primary, backgroundColor: theme.surface }]}
+                  onPress={handleShareProfile}
+                >
+                  <Share2 size={15} color={theme.primary} style={{ marginRight: 6 }} />
+                  <Text style={[styles.heroShareBtnText, { color: theme.primary }]}>Share Profile</Text>
                 </TouchableOpacity>
 
                 {/* Settings Tab / Button */}
                 <TouchableOpacity
-                  style={styles.heroSettingsBtn}
+                  style={[styles.heroSettingsBtn, { backgroundColor: theme.surfaceLight, borderColor: theme.border }]}
                   onPress={() => setActiveMainTab('settings')}
                 >
-                  <Settings size={15} color="#F8FAFC" />
+                  <Settings size={15} color={theme.text} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -752,49 +812,49 @@ export const ProfileScreen = ({ navigation }: any) => {
             {/* Real Name & Unique Username */}
             <View style={styles.namesBlock}>
               <View style={styles.realNameRow}>
-                <Text style={styles.heroRealName}>{profileData?.name || 'Alex Rivera'}</Text>
-                <View style={styles.verifiedPill}>
-                  <ShieldCheck size={12} color="#10B981" />
-                  <Text style={styles.verifiedText}>Verified</Text>
+                <Text style={[styles.heroRealName, { color: theme.text }]}>{profileData?.name || 'Alex Rivera'}</Text>
+                <View style={[styles.verifiedPill, { backgroundColor: theme.badgeBg }]}>
+                  <ShieldCheck size={12} color={theme.badgeText} />
+                  <Text style={[styles.verifiedText, { color: theme.badgeText }]}>Verified</Text>
                 </View>
               </View>
 
-              <Text style={styles.heroUsername}>@{username}</Text>
-              <Text style={styles.heroStudentId}>
+              <Text style={[styles.heroUsername, { color: theme.primary }]}>@{username}</Text>
+              <Text style={[styles.heroStudentId, { color: theme.textSecondary }]}>
                 Student ID: {profileData?.studentId || user?.studentId || 'Assigned on Verification'} • {profileData?.course || user?.course || 'B.Tech CSE'}
               </Text>
             </View>
 
             {/* Bio */}
-            <Text style={styles.heroBio}>
+            <Text style={[styles.heroBio, { color: theme.textSecondary }]}>
               {profileData?.bio ||
                 `Student of ${profileData?.course || user?.course || 'B.Tech'} at Assam Down Town University. Eager to collaborate, teach, and learn.`}
             </Text>
 
             {/* 4-Stat Strip */}
-            <View style={styles.statsStrip}>
+            <View style={[styles.statsStrip, { backgroundColor: theme.surfaceLight, borderColor: theme.border }]}>
               <View style={styles.statBox}>
-                <Clock size={16} color="#38BDF8" />
-                <Text style={styles.statNumber}>{teachingHours}h</Text>
-                <Text style={styles.statLabel}>Teaching Hours</Text>
+                <Clock size={16} color={theme.primary} />
+                <Text style={[styles.statNumber, { color: theme.text }]}>{teachingHours}h</Text>
+                <Text style={[styles.statLabel, { color: theme.textMuted }]}>Teaching Hours</Text>
               </View>
 
               <View style={styles.statBox}>
-                <Award size={16} color="#C084FC" />
-                <Text style={styles.statNumber}>{sessionsCount}</Text>
-                <Text style={styles.statLabel}>Sessions Hosted</Text>
+                <Award size={16} color={theme.secondary} />
+                <Text style={[styles.statNumber, { color: theme.text }]}>{sessionsCount}</Text>
+                <Text style={[styles.statLabel, { color: theme.textMuted }]}>Sessions Hosted</Text>
               </View>
 
               <View style={styles.statBox}>
                 <Star size={16} color="#FBBF24" />
-                <Text style={styles.statNumber}>{peerRating}</Text>
-                <Text style={styles.statLabel}>Peer Rating</Text>
+                <Text style={[styles.statNumber, { color: theme.text }]}>{peerRating}</Text>
+                <Text style={[styles.statLabel, { color: theme.textMuted }]}>Peer Rating</Text>
               </View>
 
               <View style={styles.statBox}>
-                <Coins size={16} color="#10B981" />
-                <Text style={styles.statNumber}>{currentBalance.toFixed(1)}</Text>
-                <Text style={styles.statLabel}>Time-Credits</Text>
+                <Coins size={16} color={theme.primary} />
+                <Text style={[styles.statNumber, { color: theme.text }]}>{currentBalance.toFixed(1)}</Text>
+                <Text style={[styles.statLabel, { color: theme.textMuted }]}>Time-Credits</Text>
               </View>
             </View>
           </View>
@@ -1332,48 +1392,58 @@ export const ProfileScreen = ({ navigation }: any) => {
             </View>
           )}
 
-          {/* SUB-TAB 3: SESSION HISTORY */}
-          {settingsSubTab === 'history' && (
-            <View style={styles.historySection}>
-              <Text style={styles.customCategoryHeading}>
-                SESSION RECORD ({mySessions.length} SESSIONS)
-              </Text>
+          {/* SUB-TAB 3: SESSION HISTORY (Concluded & Cancelled Sessions) */}
+          {settingsSubTab === 'history' && (() => {
+            const historySessions = mySessions.filter(
+              (s) =>
+                s.status === 'completed' ||
+                s.status === 'cancelled' ||
+                (s.status as any) === SessionStatus.COMPLETED ||
+                (s.status as any) === SessionStatus.CANCELLED
+            );
 
-              {mySessions.length === 0 ? (
-                <View style={styles.emptySessionsCard}>
-                  <Text style={styles.emptySessionsText}>
-                    You have not hosted or joined any recorded sessions yet.
-                  </Text>
-                </View>
-              ) : (
-                mySessions.map((s) => (
-                  <View key={s.id} style={styles.historySessionCard}>
-                    <View style={styles.historyCardTop}>
-                      <Text style={styles.historySessionTitle}>{s.title || s.skillName}</Text>
-                      <View style={[styles.sessionStatusPill, s.status === 'completed' ? styles.statusDone : styles.statusSched]}>
-                        <Text style={styles.sessionStatusPillText}>{s.status.toUpperCase()}</Text>
+            return (
+              <View style={styles.historySection}>
+                <Text style={styles.customCategoryHeading}>
+                  SESSION RECORD ({historySessions.length} SESSIONS)
+                </Text>
+
+                {historySessions.length === 0 ? (
+                  <View style={styles.emptySessionsCard}>
+                    <Text style={styles.emptySessionsText}>
+                      No concluded or cancelled sessions recorded yet. Completed and cancelled sessions appear here.
+                    </Text>
+                  </View>
+                ) : (
+                  historySessions.map((s) => (
+                    <View key={s.id} style={styles.historySessionCard}>
+                      <View style={styles.historyCardTop}>
+                        <Text style={styles.historySessionTitle}>{s.title || s.skillName}</Text>
+                        <View style={[styles.sessionStatusPill, s.status === 'completed' ? styles.statusDone : styles.statusSched]}>
+                          <Text style={styles.sessionStatusPillText}>{s.status.toUpperCase()}</Text>
+                        </View>
+                      </View>
+
+                      <Text style={styles.historyHostText}>
+                        Host: {s.hostName} (@{s.hostUsername || 'host'})
+                      </Text>
+
+                      <View style={styles.historyMetaRow}>
+                        <Calendar size={12} color="#38BDF8" style={{ marginRight: 4 }} />
+                        <Text style={styles.historyMetaText}>
+                          {new Date(s.scheduledAt).toLocaleDateString([], {
+                            month: 'short',
+                            day: 'numeric',
+                          })}{' '}
+                          • {s.durationHours} Hours • {s.sessionType}
+                        </Text>
                       </View>
                     </View>
-
-                    <Text style={styles.historyHostText}>
-                      Host: {s.hostName} (@{s.hostUsername || 'host'})
-                    </Text>
-
-                    <View style={styles.historyMetaRow}>
-                      <Calendar size={12} color="#38BDF8" style={{ marginRight: 4 }} />
-                      <Text style={styles.historyMetaText}>
-                        {new Date(s.scheduledAt).toLocaleDateString([], {
-                          month: 'short',
-                          day: 'numeric',
-                        })}{' '}
-                        • {s.durationHours} Hours • {s.sessionType}
-                      </Text>
-                    </View>
-                  </View>
-                ))
-              )}
-            </View>
-          )}
+                  ))
+                )}
+              </View>
+            );
+          })()}
 
           {/* SUB-TAB 4: EXPORT RESUME (.png) */}
           {settingsSubTab === 'resume' && (
@@ -1715,17 +1785,53 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8E5',
   },
   coverBanner: {
-    backgroundColor: '#0E6245',
+    height: 165,
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 48,
+    justifyContent: 'space-between',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  bannerDecorLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  bannerContentWrap: {
+    flex: 1,
+    justifyContent: 'space-between',
+    zIndex: 2,
+  },
+  bannerTopLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  themeIndicatorPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  themeIndicatorText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.6,
   },
   universityBadge: {
     alignSelf: 'flex-start',
     marginBottom: 4,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 10,
   },
   universityBadgeText: {
     color: '#FEF3C7',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.8,
   },
@@ -1739,8 +1845,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    marginTop: -38,
+    marginTop: -44,
     marginBottom: 12,
+    zIndex: 10,
   },
   avatarWrapper: {},
   actionBtnRow: {

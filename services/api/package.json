@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "build": "tsc",
+    "postinstall": "prisma generate --schema=src/db/prisma/schema.prisma",
     "start": "node dist/main.js",
     "test": "vitest run",
     "test:credits": "vitest run test/credits.spec.ts",

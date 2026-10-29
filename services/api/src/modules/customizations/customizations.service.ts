@@ -157,18 +157,24 @@ export class CustomizationsService {
   /**
    * Activate an unlocked customization item (only one active per category)
    */
-  static async activate(userId: string, optionId: string) {
-    const target = await prisma.customizationOption.findUnique({
-      where: { id: optionId },
+  static async activate(userId: string, optionIdOrKey: string) {
+    let target = await prisma.customizationOption.findUnique({
+      where: { id: optionIdOrKey },
     });
 
-    if (!target) throw new NotFoundError('Option not found');
+    if (!target) {
+      target = await prisma.customizationOption.findUnique({
+        where: { key: optionIdOrKey },
+      });
+    }
+
+    if (!target) throw new NotFoundError('Customization option not found');
 
     const unlocked = await prisma.userCustomization.findUnique({
       where: {
         user_id_customization_option_id: {
           user_id: userId,
-          customization_option_id: optionId,
+          customization_option_id: target.id,
         },
       },
     });
@@ -178,8 +184,9 @@ export class CustomizationsService {
       select: { username: true, email: true },
     });
     const isAdmin = user?.username === 'admin' || user?.email === 'admin@adtu.in';
+    const isDefaultTheme = target.key === 'profile_theme_sunrise';
 
-    if (!unlocked && !isAdmin && target.unlock_value > 0) {
+    if (!unlocked && !isAdmin && !isDefaultTheme && target.unlock_value > 0) {
       throw new ForbiddenError('You must unlock this customization before activating it');
     }
 
@@ -190,13 +197,13 @@ export class CustomizationsService {
           where: {
             user_id_customization_option_id: {
               user_id: userId,
-              customization_option_id: optionId,
+              customization_option_id: target.id,
             },
           },
           update: {},
           create: {
             user_id: userId,
-            customization_option_id: optionId,
+            customization_option_id: target.id,
             active: false,
           },
         });
@@ -224,7 +231,7 @@ export class CustomizationsService {
         where: {
           user_id_customization_option_id: {
             user_id: userId,
-            customization_option_id: optionId,
+            customization_option_id: target.id,
           },
         },
         data: { active: true },

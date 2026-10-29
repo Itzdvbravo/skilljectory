@@ -60,39 +60,43 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
-// Initialize Background Cron Jobs (Section 7)
-// 1. Monthly Refill Job: 1st of month, 00:00 campus-local time
-cron.schedule('0 0 1 * *', async () => {
-  try {
-    await runMonthlyRefillJob();
-  } catch (err) {
-    console.error('[Cron:MonthlyRefill Error]', err);
-  }
-});
+const isServerless = Boolean(process.env.VERCEL);
 
-// 2. Annual Reverification Job: Daily at 00:00
-cron.schedule('0 0 * * *', async () => {
-  try {
-    await runAnnualReverificationJob();
-  } catch (err) {
-    console.error('[Cron:AnnualReverification Error]', err);
-  }
-});
-
-// 3. Skill Demand & Rarity Report: Weekly on Sunday at 02:00
-cron.schedule('0 2 * * 0', async () => {
-  try {
-    await runDemandReportJob();
-  } catch (err) {
-    console.error('[Cron:DemandReport Error]', err);
-  }
-});
-
-if (process.env.NODE_ENV !== 'test') {
-  app.listen(Number(PORT), '0.0.0.0', () => {
-    console.log(`Campus Skill Exchange API running on http://0.0.0.0:${PORT} (accessible via LAN/USB reverse)`);
-    console.log(`Background jobs initialized (Monthly refill, Annual reverification, Skill demand reports).`);
+if (!isServerless) {
+  // Initialize Background Cron Jobs (Section 7)
+  // 1. Monthly Refill Job: 1st of month, 00:00 campus-local time
+  cron.schedule('0 0 1 * *', async () => {
+    try {
+      await runMonthlyRefillJob();
+    } catch (err) {
+      console.error('[Cron:MonthlyRefill Error]', err);
+    }
   });
+
+  // 2. Annual Reverification Job: Daily at 00:00
+  cron.schedule('0 0 * * *', async () => {
+    try {
+      await runAnnualReverificationJob();
+    } catch (err) {
+      console.error('[Cron:AnnualReverification Error]', err);
+    }
+  });
+
+  // 3. Skill Demand & Rarity Report: Weekly on Sunday at 02:00
+  cron.schedule('0 2 * * 0', async () => {
+    try {
+      await runDemandReportJob();
+    } catch (err) {
+      console.error('[Cron:DemandReport Error]', err);
+    }
+  });
+
+  if (process.env.NODE_ENV !== 'test') {
+    app.listen(Number(PORT), '0.0.0.0', () => {
+      console.log(`Campus Skill Exchange API running on http://0.0.0.0:${PORT} (accessible via LAN/USB reverse)`);
+      console.log(`Background jobs initialized (Monthly refill, Annual reverification, Skill demand reports).`);
+    });
+  }
 }
 
 export default app;

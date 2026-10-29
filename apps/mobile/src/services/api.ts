@@ -15,6 +15,12 @@ import {
 import Constants from 'expo-constants';
 
 function getCandidateHosts(): string[] {
+  // If a cloud URL (like Vercel) is configured in environment, prioritize it
+  const remoteApi = process.env.EXPO_PUBLIC_API_URL;
+  if (remoteApi) {
+    return [remoteApi.trim()];
+  }
+
   const dynamicExpoHost =
     Constants.expoConfig?.hostUri?.split(':')[0] ||
     (Constants as any).manifest2?.extra?.expoClient?.hostUri?.split(':')[0] ||
@@ -48,7 +54,10 @@ async function request(endpoint: string, options: RequestInit = {}) {
   let lastError: any = null;
 
   for (const host of hostsToTry) {
-    const url = `http://${host}:4000/api${endpoint}`;
+    const cleanHost = host.replace(/\/+$/, '');
+    const url = cleanHost.startsWith('http://') || cleanHost.startsWith('https://')
+      ? (cleanHost.endsWith('/api') ? `${cleanHost}${endpoint}` : `${cleanHost}/api${endpoint}`)
+      : `http://${cleanHost}:4000/api${endpoint}`;
     try {
       const res = await fetch(url, {
         ...options,

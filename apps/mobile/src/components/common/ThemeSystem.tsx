@@ -24,10 +24,79 @@ export interface ThemeColors {
   textMuted: string;
   border: string;
   pillDark: string;
+  // Banner and theme specific tokens
+  bannerBg: string;
+  bannerGradient: string[];
+  bannerAccent: string;
+  bannerSubText: string;
+  heroCardBg: string;
+  heroBorder: string;
+  badgeBg: string;
+  badgeText: string;
 }
 
-export const ARTBOARD_THEME: ThemeColors = {
-  name: 'Campus Academic Light',
+export const SUNRISE_THEME: ThemeColors = {
+  name: 'Sunrise Horizon',
+  background: '#FFFBEB',
+  surface: '#FFFFFF',
+  surfaceLight: '#FFF7ED',
+  surfaceMint: '#FEF3C7',
+  surfaceRose: '#FEE2E2',
+  surfacePurple: '#FFEDD5',
+  surfaceYellow: '#FEF3C7',
+  surfaceMuted: '#FDF4E7',
+  primary: '#D97706',
+  primaryGlow: 'rgba(217, 119, 6, 0.2)',
+  primaryDark: '#B45309',
+  secondary: '#F59E0B',
+  accent: '#EA580C',
+  text: '#1E1B4B',
+  textSecondary: '#451A03',
+  textMuted: '#78350F',
+  border: '#FDE68A',
+  pillDark: '#78350F',
+  bannerBg: '#C2410C',
+  bannerGradient: ['#9A3412', '#EA580C', '#F59E0B'],
+  bannerAccent: '#FEF3C7',
+  bannerSubText: '#FDE68A',
+  heroCardBg: '#FFFFFF',
+  heroBorder: '#FCD34D',
+  badgeBg: '#FEF3C7',
+  badgeText: '#92400E',
+};
+
+export const MIDNIGHT_THEME: ThemeColors = {
+  name: 'Midnight OLED',
+  background: '#030712',
+  surface: '#0B1120',
+  surfaceLight: '#111827',
+  surfaceMint: '#0C2340',
+  surfaceRose: '#2A1215',
+  surfacePurple: '#1C1536',
+  surfaceYellow: '#2A2008',
+  surfaceMuted: '#0F172A',
+  primary: '#00F0FF',
+  primaryGlow: 'rgba(0, 240, 255, 0.28)',
+  primaryDark: '#0284C7',
+  secondary: '#38BDF8',
+  accent: '#00F0FF',
+  text: '#F8FAFC',
+  textSecondary: '#94A3B8',
+  textMuted: '#64748B',
+  border: '#1E293B',
+  pillDark: '#0284C7',
+  bannerBg: '#050814',
+  bannerGradient: ['#030712', '#0B1120', '#0284C7'],
+  bannerAccent: '#00F0FF',
+  bannerSubText: '#7DD3FC',
+  heroCardBg: '#0B1120',
+  heroBorder: '#1E293B',
+  badgeBg: 'rgba(0, 240, 255, 0.14)',
+  badgeText: '#00F0FF',
+};
+
+export const AURORA_THEME: ThemeColors = {
+  name: 'Aurora Emerald',
   background: '#F8FAF9',
   surface: '#FFFFFF',
   surfaceLight: '#F3F6F4',
@@ -39,23 +108,34 @@ export const ARTBOARD_THEME: ThemeColors = {
   primary: '#0E6245',
   primaryGlow: 'rgba(14, 98, 69, 0.15)',
   primaryDark: '#084832',
-  secondary: '#38BDF8',
-  accent: '#0E6245',
+  secondary: '#10B981',
+  accent: '#059669',
   text: '#111827',
   textSecondary: '#374151',
   textMuted: '#6B7280',
   border: '#E2E8E5',
   pillDark: '#18201D',
+  bannerBg: '#064E3B',
+  bannerGradient: ['#064E3B', '#047857', '#10B981'],
+  bannerAccent: '#A7F3D0',
+  bannerSubText: '#D1FAE5',
+  heroCardBg: '#FFFFFF',
+  heroBorder: '#A7F3D0',
+  badgeBg: '#EBF7F0',
+  badgeText: '#065F46',
 };
 
+export const ARTBOARD_THEME: ThemeColors = AURORA_THEME;
+
 export const THEMES: Record<string, ThemeColors> = {
-  profile_theme_sunrise: ARTBOARD_THEME,
-  profile_theme_midnight: ARTBOARD_THEME,
-  profile_theme_aurora: ARTBOARD_THEME,
+  profile_theme_sunrise: SUNRISE_THEME,
+  profile_theme_midnight: MIDNIGHT_THEME,
+  profile_theme_aurora: AURORA_THEME,
 };
 
 export function useAppTheme(): ThemeColors {
-  return ARTBOARD_THEME;
+  const activeThemeKey = useAuthStore((s) => s.activeThemeKey);
+  return THEMES[activeThemeKey] || THEMES.profile_theme_sunrise || SUNRISE_THEME;
 }
 
 export const BrandUnderline: React.FC<{ width?: number | string; style?: StyleProp<ViewStyle> }> = ({

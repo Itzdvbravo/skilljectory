@@ -116,11 +116,20 @@ export const SessionsListScreen = ({ navigation }: any) => {
     const isPendingReq = isSessionPendingForUser(s);
     const hasJoined = s.hasJoined || s.participants?.some((p) => p.userId === user?.id);
 
+    const isCancelled = s.status === SessionStatus.CANCELLED || (s.status as any) === 'cancelled';
+    const isCompleted = s.status === SessionStatus.COMPLETED || (s.status as any) === 'completed';
+    const isConcludedOrCancelled = isCancelled || isCompleted;
+
+    // Session History tab holds concluded & cancelled sessions exclusively
+    if (activeTab === 'completed') return isConcludedOrCancelled;
+
+    // All active tabs (All, Requests, Hosting, Joined) must NOT show concluded or cancelled sessions
+    if (isConcludedOrCancelled) return false;
+
     if (activeTab === 'requests') return isPendingReq;
-    if (activeTab === 'hosting') return isHost && s.status !== SessionStatus.COMPLETED && (s.status as any) !== 'completed';
-    if (activeTab === 'joined') return hasJoined && !isHost && s.status !== SessionStatus.COMPLETED && (s.status as any) !== 'completed';
-    if (activeTab === 'completed') return s.status === SessionStatus.COMPLETED || (s.status as any) === 'completed';
-    return true;
+    if (activeTab === 'hosting') return isHost;
+    if (activeTab === 'joined') return hasJoined && !isHost;
+    return true; // 'all' tab shows all active non-concluded, non-cancelled sessions
   });
 
   const formatSchedule = (dateStr: string | Date) => {
@@ -420,13 +429,17 @@ export const SessionsListScreen = ({ navigation }: any) => {
           ListEmptyComponent={
             <View style={styles.emptyCard}>
               <Calendar size={40} color="#0E6245" style={{ marginBottom: 12 }} />
-              <Text style={styles.emptyTitle}>No sessions in this tab</Text>
+              <Text style={styles.emptyTitle}>
+                {activeTab === 'completed' ? 'No session history yet' : 'No sessions in this tab'}
+              </Text>
               <Text style={styles.emptySub}>
                 {activeTab === 'requests'
                   ? 'No pending mentorship or co-host invitations at the moment.'
+                  : activeTab === 'completed'
+                  ? 'Concluded and cancelled sessions will appear here in your session history.'
                   : 'Start teaching by hosting a campus session!'}
               </Text>
-              {activeTab !== 'requests' && (
+              {activeTab !== 'requests' && activeTab !== 'completed' && (
                 <TouchableOpacity
                   style={styles.emptyHostBtn}
                   onPress={() => navigation.navigate('CreateSession')}

@@ -1,0 +1,635 @@
+{
+  "admin": {
+    "id": "usr_admin_master",
+    "email": "admin@adtu.in",
+    "username": "admin",
+    "password_hash": "$2a$10$EWqlIK8gpC6urx2vzu/zS.viXHH4gEuostpdkH2bj9fiqmHaIoDRG",
+    "name": "Campus Administrator",
+    "student_id": "ADTU-ADMIN-01",
+    "verification_method": "email",
+    "verification_status": "verified",
+    "verified_at": "2026-10-29T06:51:21.967Z",
+    "verification_expires_at": "2027-10-29T06:51:21.967Z",
+    "signup_bonus_claimed": true,
+    "free_announcements_used": 1,
+    "free_announcement_window_start": "2026-10-29T08:24:35.572Z",
+    "status": "active",
+    "credit_balance": 995.5,
+    "unlocked_blogging_at": "2026-10-29T06:51:21.967Z",
+    "created_at": "2026-10-29T06:51:21.970Z",
+    "updated_at": "2026-10-29T17:16:24.262Z",
+    "profile": {
+      "id": "dc4907e6-85d4-4ce2-acd9-605fe38b9fab",
+      "user_id": "usr_admin_master",
+      "bio": "Campus Administrator & System Guide with all features, themes, and badges unlocked.",
+      "video_url": null,
+      "avatar_url": null,
+      "course": null,
+      "department": null,
+      "enrollment_year": null,
+      "years_of_study": null,
+      "current_year": null,
+      "resume_export_prefs_json": "{\"showEmail\":true,\"showBadges\":true,\"showTeachingHours\":true,\"showReviews\":true}",
+      "created_at": "2026-10-29T06:51:21.971Z",
+      "updated_at": "2026-10-29T06:51:21.971Z"
+    },
+    "customizations": [
+      {
+        "id": "0b3cf800-2d04-4962-8140-32433a4b737b",
+        "user_id": "usr_admin_master",
+        "customization_option_id": "9ce0fb79-ed76-4255-98c2-fe4ce3c71245",
+        "unlocked_at": "2026-10-29T06:51:21.975Z",
+        "active": false,
+        "created_at": "2026-10-29T06:51:21.975Z",
+        "updated_at": "2026-10-29T17:41:59.797Z",
+        "option": {
+          "id": "9ce0fb79-ed76-4255-98c2-fe4ce3c71245",
+          "key": "profile_theme_sunrise",
+          "label": "Sunrise Horizon Theme",
+          "category": "theme",
+          "unlock_type": "credits",
+          "unlock_value": 1,
+          "tier": "basic",
+          "created_at": "2026-10-27T08:54:22.482Z",
+          "updated_at": "2026-10-29T06:51:21.882Z"
+        }
+      },
+      {
+        "id": "b2759232-e98e-4fa6-82d1-d7e6989e654f",
+        "user_id": "usr_admin_master",
+        "customization_option_id": "5b705b96-0bcb-47aa-a0b3-935df062cc31",
+        "unlocked_at": "2026-10-29T06:51:21.978Z",
+        "active": true,
+        "created_at": "2026-10-29T06:51:21.978Z",
+        "updated_at": "2026-10-29T17:41:59.802Z",
+        "option": {
+          "id": "5b705b96-0bcb-47aa-a0b3-935df062cc31",
+          "key": "profile_theme_midnight",
+          "label": "Midnight OLED Dark Theme",
+          "category": "theme",
+          "unlock_type": "credits",
+          "unlock_value": 1,
+          "tier": "basic",
+          "created_at": "2026-10-27T08:54:22.503Z",
+          "updated_at": "2026-10-29T06:51:21.886Z"
+        }
+      },
+      {
+        "id": "281927f9-0878-4534-9e4c-2ed6fe3f1784",
+        "user_id": "usr_admin_master",
+        "customization_option_id": "1635b4a1-7189-4dbc-a959-20711e7bb605",
+        "unlocked_at": "2026-10-29T06:51:21.978Z",
+        "active": false,
+        "created_at": "2026-10-29T06:51:21.978Z",
+        "updated_at": "2026-10-29T06:51:21.978Z",
+        "option": {
+          "id": "1635b4a1-7189-4dbc-a959-20711e7bb605",
+          "key": "banner_style_minimal",
+          "label": "Clean Minimalist Showcase Banner",
+          "category": "banner",
+          "unlock_type": "credits",
+          "unlock_value": 2,
+          "tier": "basic",
+          "created_at": "2026-10-27T08:54:22.505Z",
+          "updated_at": "2026-10-29T06:51:21.887Z"
+        }
+      },
+      {
+        "id": "777beab2-5fc2-46c7-8c3d-d37dd1a2444d",
+        "user_id": "usr_admin_master",
+        "customization_option_id": "c0cdc4f4-76d4-4d2d-9325-73a4f574a6dc",
+        "unlocked_at": "2026-10-29T06:51:21.979Z",
+        "active": false,
+        "created_at": "2026-10-29T06:51:21.979Z",
+        "updated_at": "2026-10-29T06:51:21.979Z",
+        "option": {
+          "id": "c0cdc4f4-76d4-4d2d-9325-73a4f574a6dc",
+          "key": "badge_frame_bronze",
+          "label": "Bronze Scholar Badge Frame",
+          "category": "badge_frame",
+          "unlock_type": "credits",
+          "unlock_value": 2,
+          "tier": "basic",
+          "created_at": "2026-10-27T08:54:22.507Z",
+          "updated_at": "2026-10-29T06:51:21.888Z"
+        }
+      },
+      {
+        "id": "233c04fc-6fde-4899-9e63-f69b946c097c",
+        "user_id": "usr_admin_master",
+        "customization_option_id": "43c0386d-b9af-477a-9948-fd5d09ae8fa4",
+        "unlocked_at": "2026-10-29T06:51:21.981Z",
+        "active": false,
+        "created_at": "2026-10-29T06:51:21.981Z",
+        "updated_at": "2026-10-29T17:41:59.797Z",
+        "option": {
+          "id": "43c0386d-b9af-477a-9948-fd5d09ae8fa4",
+          "key": "profile_theme_aurora",
+          "label": "Aurora Borealis Gradient Theme",
+          "category": "theme",
+          "unlock_type": "sessions",
+          "unlock_value": 3,
+          "tier": "advanced",
+          "created_at": "2026-10-27T08:54:22.509Z",
+          "updated_at": "2026-10-29T06:51:21.889Z"
+        }
+      },
+      {
+        "id": "8ba8a6ac-b580-4f2b-ba57-c8d8c5fd2286",
+        "user_id": "usr_admin_master",
+        "customization_option_id": "7637c1e8-0878-4495-bc41-39b850fdf004",
+        "unlocked_at": "2026-10-29T06:51:21.982Z",
+        "active": false,
+        "created_at": "2026-10-29T06:51:21.982Z",
+        "updated_at": "2026-10-29T06:51:21.982Z",
+        "option": {
+          "id": "7637c1e8-0878-4495-bc41-39b850fdf004",
+          "key": "layout_featured_materials",
+          "label": "Featured Study Materials Layout",
+          "category": "layout",
+          "unlock_type": "sessions",
+          "unlock_value": 3,
+          "tier": "advanced",
+          "created_at": "2026-10-27T08:54:22.510Z",
+          "updated_at": "2026-10-29T06:51:21.889Z"
+        }
+      },
+      {
+        "id": "aeb8c1c8-9ff5-4a6d-a6ff-68e59341628f",
+        "user_id": "usr_admin_master",
+        "customization_option_id": "7bcb0f63-7c6d-4b3a-bfea-b3d82ae5ad0a",
+        "unlocked_at": "2026-10-29T06:51:21.983Z",
+        "active": false,
+        "created_at": "2026-10-29T06:51:21.983Z",
+        "updated_at": "2026-10-29T06:51:21.983Z",
+        "option": {
+          "id": "7bcb0f63-7c6d-4b3a-bfea-b3d82ae5ad0a",
+          "key": "banner_style_dynamic_stats",
+          "label": "Dynamic Live Stats Banner",
+          "category": "banner",
+          "unlock_type": "sessions",
+          "unlock_value": 4,
+          "tier": "advanced",
+          "created_at": "2026-10-27T08:54:22.512Z",
+          "updated_at": "2026-10-29T06:51:21.890Z"
+        }
+      },
+      {
+        "id": "8e900aa4-5934-48b5-9741-c7d019cc6f7e",
+        "user_id": "usr_admin_master",
+        "customization_option_id": "39be18f3-275b-41a5-8c5e-5379088ceb7c",
+        "unlocked_at": "2026-10-29T06:51:21.983Z",
+        "active": true,
+        "created_at": "2026-10-29T06:51:21.983Z",
+        "updated_at": "2026-10-29T06:51:21.983Z",
+        "option": {
+          "id": "39be18f3-275b-41a5-8c5e-5379088ceb7c",
+          "key": "badge_frame_gold",
+          "label": "Master Gold Prestige Badge Frame",
+          "category": "badge_frame",
+          "unlock_type": "sessions",
+          "unlock_value": 5,
+          "tier": "advanced",
+          "created_at": "2026-10-27T08:54:22.514Z",
+          "updated_at": "2026-10-29T06:51:21.891Z"
+        }
+      }
+    ],
+    "credit_ledger": [
+      {
+        "id": "154663af-b800-4752-b4a1-76e3b091c482",
+        "user_id": "usr_admin_master",
+        "amount": 999,
+        "balance_after": 999,
+        "type": "monthly_refill",
+        "reference_type": "admin_initial_grant",
+        "reference_id": "system",
+        "created_at": "2026-10-29T06:51:21.990Z"
+      },
+      {
+        "id": "2cdb45b8-64c1-482e-9ee4-263b9ff987d6",
+        "user_id": "usr_admin_master",
+        "amount": -1,
+        "balance_after": 998,
+        "type": "session_host_cost",
+        "reference_type": "session",
+        "reference_id": "a1d4707a-d892-4cfc-a318-30b4ab6c33c1",
+        "created_at": "2026-10-29T08:06:16.359Z"
+      },
+      {
+        "id": "2fb65e89-56fe-4ba7-8d9b-177aefde297b",
+        "user_id": "usr_admin_master",
+        "amount": -1,
+        "balance_after": 997,
+        "type": "session_host_cost",
+        "reference_type": "session",
+        "reference_id": "f57a2ffc-1702-4856-9a0a-987309d475e1",
+        "created_at": "2026-10-29T08:27:05.753Z"
+      },
+      {
+        "id": "6c0c3cee-5731-4c85-8b1f-80aff0432c65",
+        "user_id": "usr_admin_master",
+        "amount": -1,
+        "balance_after": 996,
+        "type": "announcement_cost",
+        "reference_type": "session_announcement",
+        "reference_id": "f57a2ffc-1702-4856-9a0a-987309d475e1",
+        "created_at": "2026-10-29T08:27:05.761Z"
+      },
+      {
+        "id": "57de648b-6362-4c38-82a7-64f0529afa54",
+        "user_id": "usr_admin_master",
+        "amount": -1,
+        "balance_after": 995,
+        "type": "session_host_cost",
+        "reference_type": "session",
+        "reference_id": "37e794d6-0c5d-44d6-97a3-0bde29b8f139",
+        "created_at": "2026-10-29T08:57:18.788Z"
+      },
+      {
+        "id": "79c8e87d-d4ad-4e00-88f5-7766816bd022",
+        "user_id": "usr_admin_master",
+        "amount": -1,
+        "balance_after": 994,
+        "type": "session_host_cost",
+        "reference_type": "session",
+        "reference_id": "ae1e798c-a09a-4131-aede-8e38776f12cd",
+        "created_at": "2026-10-29T09:05:41.657Z"
+      },
+      {
+        "id": "bf5560e4-23a1-4e2f-86f8-674187e468b4",
+        "user_id": "usr_admin_master",
+        "amount": -1,
+        "balance_after": 993,
+        "type": "session_host_cost",
+        "reference_type": "session",
+        "reference_id": "424fa71f-f6e8-4d47-aae0-7a818a2aa659",
+        "created_at": "2026-10-29T10:13:13.926Z"
+      },
+      {
+        "id": "918123ad-43ba-4a22-8bfc-3a3562fd63d8",
+        "user_id": "usr_admin_master",
+        "amount": -1,
+        "balance_after": 992,
+        "type": "session_host_cost",
+        "reference_type": "session",
+        "reference_id": "78ae227a-4974-43d1-ab83-16d839fa6286",
+        "created_at": "2026-10-29T10:13:45.067Z"
+      },
+      {
+        "id": "73fa4427-48d4-45ca-8c1b-e93a983e267c",
+        "user_id": "usr_admin_master",
+        "amount": 1.5,
+        "balance_after": 996.5,
+        "type": "session_earning",
+        "reference_type": "session",
+        "reference_id": "fce6c7b6-32a6-4a0b-8d29-1fa9cec06ddd",
+        "created_at": "2026-10-29T11:21:04.352Z"
+      },
+      {
+        "id": "d433d12e-6f19-4e0b-93a7-a141c0fc6999",
+        "user_id": "usr_admin_master",
+        "amount": 1,
+        "balance_after": 997.5,
+        "type": "session_earning",
+        "reference_type": "session",
+        "reference_id": "a438b1a5-e5c8-4435-9b63-76078c00a517",
+        "created_at": "2026-10-29T11:23:11.840Z"
+      },
+      {
+        "id": "40f65d04-9925-49d6-a93c-4ce58e551774",
+        "user_id": "usr_admin_master",
+        "amount": -1,
+        "balance_after": 996.5,
+        "type": "session_host_cost",
+        "reference_type": "session",
+        "reference_id": "d55751c4-42a8-4187-89db-9fe40b678b6e",
+        "created_at": "2026-10-29T17:16:24.245Z"
+      },
+      {
+        "id": "26677e32-8014-4ca6-8099-191958a23551",
+        "user_id": "usr_admin_master",
+        "amount": -1,
+        "balance_after": 995.5,
+        "type": "announcement_cost",
+        "reference_type": "session_announcement",
+        "reference_id": "d55751c4-42a8-4187-89db-9fe40b678b6e",
+        "created_at": "2026-10-29T17:16:24.261Z"
+      }
+    ],
+    "user_badges": [
+      {
+        "id": "33885cef-6d43-43e8-be52-431bbd4b1802",
+        "user_id": "usr_admin_master",
+        "badge_id": "82c0c7ee-6a97-4014-973a-c49ca59e6e1e",
+        "earned_at": "2026-10-29T06:51:21.986Z",
+        "badge": {
+          "id": "82c0c7ee-6a97-4014-973a-c49ca59e6e1e",
+          "name": "Mentor Level 1 — Campus Explorer",
+          "criteria_type": "hours",
+          "threshold": 5,
+          "created_at": "2026-10-27T08:54:22.517Z",
+          "updated_at": "2026-10-29T06:51:21.892Z"
+        }
+      },
+      {
+        "id": "d41db867-0aed-44f0-a7a9-abf20c26fbfd",
+        "user_id": "usr_admin_master",
+        "badge_id": "ede436fa-3677-4727-9846-6c244eda6407",
+        "earned_at": "2026-10-29T06:51:21.988Z",
+        "badge": {
+          "id": "ede436fa-3677-4727-9846-6c244eda6407",
+          "name": "Mentor Level 2 — Dedicated Scholar",
+          "criteria_type": "hours",
+          "threshold": 15,
+          "created_at": "2026-10-27T08:54:22.527Z",
+          "updated_at": "2026-10-29T06:51:21.894Z"
+        }
+      },
+      {
+        "id": "9948fdf2-d945-4918-b921-845c940d427f",
+        "user_id": "usr_admin_master",
+        "badge_id": "4b72ec01-5101-472e-aae2-057103ab45bc",
+        "earned_at": "2026-10-29T06:51:21.989Z",
+        "badge": {
+          "id": "4b72ec01-5101-472e-aae2-057103ab45bc",
+          "name": "Mentor Level 3 — Senior Campus Mentor",
+          "criteria_type": "hours",
+          "threshold": 30,
+          "created_at": "2026-10-27T08:54:22.529Z",
+          "updated_at": "2026-10-29T06:51:21.894Z"
+        }
+      },
+      {
+        "id": "69e9906d-fa53-48b6-9e3c-8393d208ddb2",
+        "user_id": "usr_admin_master",
+        "badge_id": "80d12384-0c10-4390-bf9c-85aa0d4a0fc2",
+        "earned_at": "2026-10-29T06:51:21.990Z",
+        "badge": {
+          "id": "80d12384-0c10-4390-bf9c-85aa0d4a0fc2",
+          "name": "5-Star Campus Guide",
+          "criteria_type": "rating",
+          "threshold": 4.8,
+          "created_at": "2026-10-27T08:54:22.532Z",
+          "updated_at": "2026-10-29T06:51:21.895Z"
+        }
+      }
+    ],
+    "user_skills": [],
+    "social_links": []
+  },
+  "allSkills": [
+    {
+      "id": "a5cac098-951f-447f-a53f-64a05a0e9d67",
+      "name_normalized": "healthcare",
+      "display_name": "healthcare",
+      "category": "Computer Science",
+      "created_at": "2026-10-28T15:37:12.492Z",
+      "updated_at": "2026-10-28T15:37:12.492Z"
+    },
+    {
+      "id": "317c2bb2-0253-4c6e-a0b1-b9c59c6860e3",
+      "name_normalized": "react native",
+      "display_name": "React Native",
+      "category": "Mobile Engineering",
+      "created_at": "2026-10-27T08:54:22.536Z",
+      "updated_at": "2026-10-29T06:51:21.896Z"
+    },
+    {
+      "id": "51c02797-7b0a-492a-9f8b-a53a5a968699",
+      "name_normalized": "python data structures",
+      "display_name": "Python Data Structures",
+      "category": "Computer Science",
+      "created_at": "2026-10-27T08:54:22.548Z",
+      "updated_at": "2026-10-29T06:51:21.898Z"
+    },
+    {
+      "id": "7941b26e-ea63-4e80-9f4d-6ea7752b1389",
+      "name_normalized": "ui/ux glassmorphic design",
+      "display_name": "UI/UX Glassmorphic Design",
+      "category": "Design",
+      "created_at": "2026-10-27T08:54:22.550Z",
+      "updated_at": "2026-10-29T06:51:21.899Z"
+    },
+    {
+      "id": "191b78f0-b698-44aa-acde-0eef6ac3e5d0",
+      "name_normalized": "organic chemistry",
+      "display_name": "Organic Chemistry",
+      "category": "Science",
+      "created_at": "2026-10-27T08:54:22.554Z",
+      "updated_at": "2026-10-29T06:51:21.900Z"
+    },
+    {
+      "id": "03d1d22b-08aa-4c0d-b501-c0cedb3020f7",
+      "name_normalized": "macroeconomics",
+      "display_name": "Macroeconomics",
+      "category": "Business",
+      "created_at": "2026-10-27T08:54:22.556Z",
+      "updated_at": "2026-10-29T06:51:21.900Z"
+    },
+    {
+      "id": "db451334-0e02-4611-93d2-7df07141787d",
+      "name_normalized": "guitar & music theory",
+      "display_name": "Guitar & Music Theory",
+      "category": "Arts",
+      "created_at": "2026-10-27T08:54:22.558Z",
+      "updated_at": "2026-10-29T06:51:21.901Z"
+    },
+    {
+      "id": "c1844e1f-15cd-422a-9c94-8ae19cd7b057",
+      "name_normalized": "public speaking",
+      "display_name": "Public Speaking",
+      "category": "Communication",
+      "created_at": "2026-10-27T08:54:22.560Z",
+      "updated_at": "2026-10-29T06:51:21.902Z"
+    },
+    {
+      "id": "a388b2df-0d5d-428c-b2f7-d251927d19f1",
+      "name_normalized": "postgresql & databases",
+      "display_name": "PostgreSQL & Databases",
+      "category": "Computer Science",
+      "created_at": "2026-10-27T08:54:22.562Z",
+      "updated_at": "2026-10-29T06:51:21.902Z"
+    },
+    {
+      "id": "a829e597-28e9-47ac-96e1-ab616c7d9cd4",
+      "name_normalized": "architecture",
+      "display_name": "Architecture",
+      "category": "Computer Science",
+      "created_at": "2026-10-29T08:06:16.350Z",
+      "updated_at": "2026-10-29T08:06:16.350Z"
+    },
+    {
+      "id": "69b91d59-b5ce-4c87-929a-f80de40c01b9",
+      "name_normalized": "data structures",
+      "display_name": "Data Structures",
+      "category": "Peer Skill",
+      "created_at": "2026-10-29T08:07:02.902Z",
+      "updated_at": "2026-10-29T08:07:02.902Z"
+    },
+    {
+      "id": "c9f93592-1fc7-4b79-8e7b-5cb6ba2e3a21",
+      "name_normalized": "cloud / aws",
+      "display_name": "Cloud / AWS",
+      "category": "Peer Skill",
+      "created_at": "2026-10-29T08:07:02.903Z",
+      "updated_at": "2026-10-29T08:07:02.903Z"
+    },
+    {
+      "id": "d1f234a5-d575-4c2f-991c-b7d77c5bb823",
+      "name_normalized": "ui/ux design",
+      "display_name": "UI/UX Design",
+      "category": "Peer Skill",
+      "created_at": "2026-10-29T08:21:07.998Z",
+      "updated_at": "2026-10-29T08:21:07.998Z"
+    },
+    {
+      "id": "f40f5728-5511-4697-a9bc-b6a8533cc353",
+      "name_normalized": "machine learning & ai",
+      "display_name": "Machine Learning & AI",
+      "category": "Peer Skill",
+      "created_at": "2026-10-29T08:21:08.006Z",
+      "updated_at": "2026-10-29T08:21:08.006Z"
+    },
+    {
+      "id": "05dbe454-170a-4460-a7b3-19ba99879dad",
+      "name_normalized": "react",
+      "display_name": "React",
+      "category": "Computer Science",
+      "created_at": "2026-10-29T08:57:18.737Z",
+      "updated_at": "2026-10-29T08:57:18.737Z"
+    },
+    {
+      "id": "818005b6-f411-49d9-a67d-f4a68b7546b0",
+      "name_normalized": "python",
+      "display_name": "Python",
+      "category": "Computer Science",
+      "created_at": "2026-10-29T08:57:18.754Z",
+      "updated_at": "2026-10-29T08:57:18.754Z"
+    }
+  ],
+  "allCustomizationOptions": [
+    {
+      "id": "9ce0fb79-ed76-4255-98c2-fe4ce3c71245",
+      "key": "profile_theme_sunrise",
+      "label": "Sunrise Horizon Theme",
+      "category": "theme",
+      "unlock_type": "credits",
+      "unlock_value": 1,
+      "tier": "basic",
+      "created_at": "2026-10-27T08:54:22.482Z",
+      "updated_at": "2026-10-29T06:51:21.882Z"
+    },
+    {
+      "id": "5b705b96-0bcb-47aa-a0b3-935df062cc31",
+      "key": "profile_theme_midnight",
+      "label": "Midnight OLED Dark Theme",
+      "category": "theme",
+      "unlock_type": "credits",
+      "unlock_value": 1,
+      "tier": "basic",
+      "created_at": "2026-10-27T08:54:22.503Z",
+      "updated_at": "2026-10-29T06:51:21.886Z"
+    },
+    {
+      "id": "1635b4a1-7189-4dbc-a959-20711e7bb605",
+      "key": "banner_style_minimal",
+      "label": "Clean Minimalist Showcase Banner",
+      "category": "banner",
+      "unlock_type": "credits",
+      "unlock_value": 2,
+      "tier": "basic",
+      "created_at": "2026-10-27T08:54:22.505Z",
+      "updated_at": "2026-10-29T06:51:21.887Z"
+    },
+    {
+      "id": "c0cdc4f4-76d4-4d2d-9325-73a4f574a6dc",
+      "key": "badge_frame_bronze",
+      "label": "Bronze Scholar Badge Frame",
+      "category": "badge_frame",
+      "unlock_type": "credits",
+      "unlock_value": 2,
+      "tier": "basic",
+      "created_at": "2026-10-27T08:54:22.507Z",
+      "updated_at": "2026-10-29T06:51:21.888Z"
+    },
+    {
+      "id": "43c0386d-b9af-477a-9948-fd5d09ae8fa4",
+      "key": "profile_theme_aurora",
+      "label": "Aurora Borealis Gradient Theme",
+      "category": "theme",
+      "unlock_type": "sessions",
+      "unlock_value": 3,
+      "tier": "advanced",
+      "created_at": "2026-10-27T08:54:22.509Z",
+      "updated_at": "2026-10-29T06:51:21.889Z"
+    },
+    {
+      "id": "7637c1e8-0878-4495-bc41-39b850fdf004",
+      "key": "layout_featured_materials",
+      "label": "Featured Study Materials Layout",
+      "category": "layout",
+      "unlock_type": "sessions",
+      "unlock_value": 3,
+      "tier": "advanced",
+      "created_at": "2026-10-27T08:54:22.510Z",
+      "updated_at": "2026-10-29T06:51:21.889Z"
+    },
+    {
+      "id": "7bcb0f63-7c6d-4b3a-bfea-b3d82ae5ad0a",
+      "key": "banner_style_dynamic_stats",
+      "label": "Dynamic Live Stats Banner",
+      "category": "banner",
+      "unlock_type": "sessions",
+      "unlock_value": 4,
+      "tier": "advanced",
+      "created_at": "2026-10-27T08:54:22.512Z",
+      "updated_at": "2026-10-29T06:51:21.890Z"
+    },
+    {
+      "id": "39be18f3-275b-41a5-8c5e-5379088ceb7c",
+      "key": "badge_frame_gold",
+      "label": "Master Gold Prestige Badge Frame",
+      "category": "badge_frame",
+      "unlock_type": "sessions",
+      "unlock_value": 5,
+      "tier": "advanced",
+      "created_at": "2026-10-27T08:54:22.514Z",
+      "updated_at": "2026-10-29T06:51:21.891Z"
+    }
+  ],
+  "allBadges": [
+    {
+      "id": "82c0c7ee-6a97-4014-973a-c49ca59e6e1e",
+      "name": "Mentor Level 1 — Campus Explorer",
+      "criteria_type": "hours",
+      "threshold": 5,
+      "created_at": "2026-10-27T08:54:22.517Z",
+      "updated_at": "2026-10-29T06:51:21.892Z"
+    },
+    {
+      "id": "ede436fa-3677-4727-9846-6c244eda6407",
+      "name": "Mentor Level 2 — Dedicated Scholar",
+      "criteria_type": "hours",
+      "threshold": 15,
+      "created_at": "2026-10-27T08:54:22.527Z",
+      "updated_at": "2026-10-29T06:51:21.894Z"
+    },
+    {
+      "id": "4b72ec01-5101-472e-aae2-057103ab45bc",
+      "name": "Mentor Level 3 — Senior Campus Mentor",
+      "criteria_type": "hours",
+      "threshold": 30,
+      "created_at": "2026-10-27T08:54:22.529Z",
+      "updated_at": "2026-10-29T06:51:21.894Z"
+    },
+    {
+      "id": "80d12384-0c10-4390-bf9c-85aa0d4a0fc2",
+      "name": "5-Star Campus Guide",
+      "criteria_type": "rating",
+      "threshold": 4.8,
+      "created_at": "2026-10-27T08:54:22.532Z",
+      "updated_at": "2026-10-29T06:51:21.895Z"
+    }
+  ]
+}

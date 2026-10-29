@@ -53,6 +53,7 @@ import { useAuthStore } from '../../store/authStore';
 import { AvatarWithBadgeFrame, BrandUnderline } from '../../components/common/ThemeSystem';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { saveOrSharePng } from '../../services/exportImage';
+import Svg, { Path, Defs, LinearGradient, Stop, Circle } from 'react-native-svg';
 
 export const SessionDetailScreen = ({ route, navigation }: any) => {
   const initialSession: SessionDto = route.params?.session;
@@ -421,6 +422,9 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
         meetingLink: session.meetingLink,
         locationAddress: session.locationAddress,
         skillsTags: session.skillsTags,
+        participantsCount: currentCount,
+        maxParticipants: maxCap,
+        mentors: session.mentors,
         showCredit,
         showLocation,
         showDateTime,
@@ -431,7 +435,7 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
       if (res?.pngBase64) {
         await saveOrSharePng(
           res.pngBase64,
-          res.fileName || `SkillJectory_Pass_${session.skillName}.png`,
+          res.fileName || `SkillJectory_StravaPass_${session.skillName}.png`,
           'Save SkillJectory Event Banner (.png)'
         );
       } else {
@@ -446,18 +450,18 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
           canvas.height = 750;
           const ctx = canvas.getContext('2d');
           if (ctx) {
-            ctx.fillStyle = '#FFFFFF';
+            ctx.fillStyle = '#0D1117';
             ctx.fillRect(0, 0, 1200, 750);
-            ctx.strokeStyle = '#0E6245';
-            ctx.lineWidth = 4;
-            ctx.strokeRect(20, 20, 1160, 710);
-            ctx.fillStyle = '#0E6245';
-            ctx.fillRect(20, 20, 1160, 24);
-            ctx.fillStyle = '#111827';
+            ctx.fillStyle = '#FC5200';
+            ctx.fillRect(20, 20, 1160, 20);
+            ctx.fillStyle = '#FFFFFF';
             ctx.font = 'bold 36px sans-serif';
-            ctx.fillText(session.title || session.skillName, 50, 140);
+            ctx.fillText(session.title || session.skillName, 50, 120);
+            ctx.fillStyle = '#94A3B8';
+            ctx.font = '20px sans-serif';
+            ctx.fillText(`Host: ${session.hostName} • ${session.durationHours} hrs • ${currentCount} students`, 50, 160);
             const fallbackDataUrl = canvas.toDataURL('image/png');
-            await saveOrSharePng(fallbackDataUrl, `SkillJectory_Pass_${session.skillName}.png`, 'Save Event Banner');
+            await saveOrSharePng(fallbackDataUrl, `SkillJectory_StravaPass_${session.skillName}.png`, 'Save Event Banner');
             return;
           }
         } catch {}
@@ -484,6 +488,9 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
         meetingLink: session.meetingLink,
         locationAddress: session.locationAddress,
         skillsTags: session.skillsTags,
+        participantsCount: currentCount,
+        maxParticipants: maxCap,
+        mentors: session.mentors,
         showCredit,
         showLocation,
         showDateTime,
@@ -494,7 +501,7 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
       if (res?.pngBase64) {
         await saveOrSharePng(
           res.pngBase64,
-          res.fileName || `SkillJectory_Pass_${session.skillName}.png`,
+          res.fileName || `SkillJectory_StravaPass_${session.skillName}.png`,
           `Share ${session.title || session.skillName} Pass (.png)`
         );
       } else {
@@ -1295,92 +1302,203 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
                 </View>
               </View>
 
-              {/* Live Banner Card Preview (Artboard Page 19) */}
-              <Text style={styles.previewSectionTitle}>LIVE BANNER PREVIEW</Text>
-              <View style={styles.bannerPreviewCard}>
-                <View style={styles.bannerPreviewHeader}>
-                  <View style={styles.bannerPreviewBadge}>
-                    <Text style={styles.bannerPreviewBadgeText}>CAMPUS SKILL EXCHANGE PASS</Text>
-                  </View>
-                  <View style={styles.bannerTypePill}>
-                    <Text style={styles.bannerPreviewType}>
-                      {session.sessionType === SessionType.MULTI_MENTOR
-                        ? 'MULTI-HOST'
-                        : session.sessionType === SessionType.GROUP
-                        ? 'GROUP'
-                        : '1-ON-1'}
-                    </Text>
-                  </View>
-                </View>
+              {/* Live Banner Card Preview (Strava-Inspired Social Post) */}
+              <Text style={styles.previewSectionTitle}>LIVE BANNER PREVIEW (STRAVA-INSPIRED)</Text>
+              {(() => {
+                const isGroup = session.sessionType === SessionType.GROUP || (session.sessionType as any) === 'group';
+                const isMultiMentor = session.sessionType === SessionType.MULTI_MENTOR || (session.sessionType as any) === 'multi_mentor';
+                const isGroupOrMulti = isGroup || isMultiMentor;
 
-                <Text style={styles.bannerPreviewTitle}>
-                  {session.title || session.skillName}
-                </Text>
+                const allMentorsList = [
+                  { name: session.hostName || 'Campus Host', username: session.hostUsername || 'host', isPrimary: true },
+                  ...(session.mentors || [])
+                    .filter((m: any) => {
+                      const mName = m.name || m.mentor?.name || m.username || m.mentor?.username;
+                      return mName && mName.toLowerCase() !== (session.hostName || '').toLowerCase();
+                    })
+                    .map((m: any) => ({
+                      name: m.name || m.mentor?.name || m.username || m.mentor?.username || 'Co-Host',
+                      username: m.username || m.mentor?.username || '',
+                      isPrimary: false,
+                      status: m.status,
+                    })),
+                ];
 
-                {showHostTag && (
-                  <View style={styles.bannerHostRow}>
-                    <View style={styles.bannerAvatarCircle}>
-                      <Text style={styles.bannerAvatarText}>CA</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.bannerHostRealName}>{session.hostName}</Text>
-                      <Text style={styles.bannerHostUsername}>@{session.hostUsername || 'host'}</Text>
-                    </View>
-                    <View style={styles.primaryHostPill}>
-                      <Text style={styles.primaryHostText}>Host</Text>
-                    </View>
-                  </View>
-                )}
+                const targetLearnerName =
+                  session.targetLearnerName ||
+                  session.participants?.find((p) => p.userId !== session.hostId)?.name ||
+                  'Scholar';
 
-                {showSkills && (
-                  <View style={styles.bannerSkillsRow}>
-                    <View style={styles.bannerSkillTag}>
-                      <Text style={styles.bannerSkillTagText}>#{session.skillName}</Text>
-                    </View>
-                    {session.skillsTags?.map((st, i) => (
-                      <View key={i} style={styles.bannerSubTag}>
-                        <Text style={styles.bannerSubTagText}>#{st}</Text>
+                return (
+                  <View style={styles.stravaPreviewCard}>
+                    {/* Top Strava Accent Line */}
+                    <View style={styles.stravaTopAccent} />
+
+                    {/* Header Row: Activity badge & live status */}
+                    <View style={styles.stravaHeaderRow}>
+                      <View style={styles.stravaActivityBadge}>
+                        <Text style={styles.stravaActivityBadgeText}>
+                          ⚡ {isMultiMentor ? 'MULTI-HOST' : isGroup ? 'GROUP WORKSHOP' : '1-ON-1'}
+                        </Text>
                       </View>
-                    ))}
-                  </View>
-                )}
+                      <View style={styles.stravaVerifiedPill}>
+                        <View style={styles.stravaPulseDot} />
+                        <Text style={styles.stravaVerifiedPillText}>ADTU VERIFIED</Text>
+                      </View>
+                      {showDateTime && (
+                        <Text style={styles.stravaDateText}>
+                          {scheduledDateObj.toLocaleDateString([], { month: 'short', day: 'numeric' })} • {scheduledDateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      )}
+                    </View>
 
-                <View style={styles.bannerMetaDivider} />
-
-                {showDateTime && (
-                  <View style={styles.bannerMetaItem}>
-                    <Calendar size={14} color="#0E6245" style={{ marginRight: 8 }} />
-                    <Text style={styles.bannerMetaText}>
-                      {scheduledDateObj.toLocaleDateString([], {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                      })}{' '}
-                      • {session.durationHours} Hours
+                    {/* Event Title */}
+                    <Text style={styles.stravaTitle}>
+                      {session.title || session.skillName}
                     </Text>
-                  </View>
-                )}
-
-                {showLocation && (
-                  <View style={styles.bannerMetaItem}>
-                    <MapPin size={14} color="#854D0E" style={{ marginRight: 8 }} />
-                    <Text style={styles.bannerMetaText}>
-                      {session.locationMode === LocationMode.ONLINE
-                        ? `Online: ${session.meetingLink || 'Meeting Link'}`
-                        : (session.locationAddress || 'Campus Center')}
+                    <Text style={styles.stravaSubTitle}>
+                      Peer-to-peer knowledge session • Assam Down Town University
                     </Text>
-                  </View>
-                )}
 
-                {showCredit && (
-                  <View style={styles.bannerMetaItem}>
-                    <Coins size={14} color="#0E6245" style={{ marginRight: 8 }} />
-                    <Text style={styles.bannerMetaTextCredit}>
-                      Time-Credit Fee / Earn: {session.durationHours} Credit(s)
-                    </Text>
+                    {/* Strava Polyline Elevation / Progress Curve */}
+                    <View style={styles.stravaPolylineBox}>
+                      <Svg width="100%" height={36} viewBox="0 0 320 36">
+                        <Defs>
+                          <LinearGradient id="prevElevationArea" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <Stop offset="0%" stopColor="#FC5200" stopOpacity="0.25" />
+                            <Stop offset="100%" stopColor="#FC5200" stopOpacity="0.0" />
+                          </LinearGradient>
+                        </Defs>
+                        <Path d="M 0 25 Q 60 8, 120 18 T 200 10 T 270 20 L 320 5 L 320 36 L 0 36 Z" fill="url(#prevElevationArea)" />
+                        <Path d="M 0 25 Q 60 8, 120 18 T 200 10 T 270 20 L 320 5" stroke="#FC5200" strokeWidth={2.5} fill="none" strokeLinecap="round" />
+                        <Circle cx={120} cy={18} r={3} fill="#FC5200" />
+                        <Circle cx={200} cy={10} r={3} fill="#FC5200" />
+                        <Circle cx={320} cy={5} r={4} fill="#FFFFFF" stroke="#FC5200" strokeWidth={2} />
+                      </Svg>
+                    </View>
+
+                    {/* Strava Big Metrics Grid */}
+                    <View style={styles.stravaStatsGrid}>
+                      {/* Metric 1: Students or Learner */}
+                      <View style={styles.stravaStatCol}>
+                        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                          <Text style={styles.stravaBigNumber}>
+                            {isGroupOrMulti ? currentCount : targetLearnerName.split(' ')[0]}
+                          </Text>
+                          {isGroupOrMulti && (
+                            <Text style={styles.stravaUnitNumber}>/{maxCap}</Text>
+                          )}
+                        </View>
+                        <Text style={styles.stravaStatLabel}>
+                          {isGroupOrMulti ? 'STUDENTS JOINED' : 'LEARNER'}
+                        </Text>
+                      </View>
+
+                      <View style={styles.stravaGridDivider} />
+
+                      {/* Metric 2: Duration */}
+                      <View style={styles.stravaStatCol}>
+                        <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                          <Text style={styles.stravaBigNumber}>{session.durationHours}</Text>
+                          <Text style={styles.stravaUnitNumber}>HRS</Text>
+                        </View>
+                        <Text style={styles.stravaStatLabel}>DURATION</Text>
+                      </View>
+
+                      <View style={styles.stravaGridDivider} />
+
+                      {/* Metric 3: Credit */}
+                      {showCredit && (
+                        <>
+                          <View style={styles.stravaStatCol}>
+                            <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                              <Text style={styles.stravaBigNumber}>+{session.durationHours}</Text>
+                              <Text style={styles.stravaUnitNumber}>CR</Text>
+                            </View>
+                            <Text style={styles.stravaStatLabel}>TIME-CREDIT</Text>
+                          </View>
+                          <View style={styles.stravaGridDivider} />
+                        </>
+                      )}
+
+                      {/* Metric 4: Verified Rating */}
+                      <View style={styles.stravaStatCol}>
+                        <Text style={[styles.stravaBigNumber, { color: '#10B981', fontSize: 15, marginTop: 4 }]}>
+                          VERIFIED
+                        </Text>
+                        <Text style={styles.stravaStatLabel}>CAMPUS PEER</Text>
+                      </View>
+                    </View>
+
+                    {/* Mentors Section: Displays ALL Mentors */}
+                    {showHostTag && (
+                      <View style={styles.stravaMentorsSection}>
+                        <Text style={styles.stravaMentorsHeading}>
+                          {isGroupOrMulti ? `SESSION MENTORS (${allMentorsList.length})` : 'HOST MENTOR'}
+                        </Text>
+                        <View style={styles.stravaMentorsList}>
+                          {allMentorsList.map((m, idx) => (
+                            <View key={idx} style={styles.stravaMentorChip}>
+                              <View style={[styles.stravaMentorAvatar, { backgroundColor: m.isPrimary ? '#FC5200' : '#0284C7' }]}>
+                                <Text style={styles.stravaMentorAvatarText}>
+                                  {m.name.substring(0, 2).toUpperCase()}
+                                </Text>
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.stravaMentorName} numberOfLines={1}>{m.name}</Text>
+                                <Text style={styles.stravaMentorUser} numberOfLines={1}>@{m.username || 'mentor'}</Text>
+                              </View>
+                              <View style={[styles.stravaRolePill, { backgroundColor: m.isPrimary ? 'rgba(252, 82, 0, 0.18)' : 'rgba(2, 132, 199, 0.18)' }]}>
+                                <Text style={[styles.stravaRolePillText, { color: m.isPrimary ? '#FF7A00' : '#38BDF8' }]}>
+                                  {m.isPrimary ? 'Host' : 'Co-Mentor'}
+                                </Text>
+                              </View>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+
+                    {/* Skills Tags */}
+                    {showSkills && (
+                      <View style={styles.stravaSkillsRow}>
+                        <View style={styles.stravaSkillPill}>
+                          <Text style={styles.stravaSkillPillText}>#{session.skillName}</Text>
+                        </View>
+                        {session.skillsTags?.map((st, i) => (
+                          <View key={i} style={styles.stravaSubSkillPill}>
+                            <Text style={styles.stravaSubSkillPillText}>#{st}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Location Bar */}
+                    {showLocation && (
+                      <View style={styles.stravaLocationBar}>
+                        <MapPin size={12} color="#FC5200" style={{ marginRight: 6 }} />
+                        <Text style={styles.stravaLocationText} numberOfLines={1}>
+                          {session.locationMode === LocationMode.ONLINE
+                            ? `Online: ${session.meetingLink || 'Video Meeting'}`
+                            : (session.locationAddress || 'Campus Hall / ADTU')}
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* Strava Footer */}
+                    <View style={styles.stravaFooterRow}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <View style={styles.stravaLogoSquare}>
+                          <Text style={styles.stravaLogoLetter}>S</Text>
+                        </View>
+                        <Text style={styles.stravaFooterBrand}>SKILLJECTORY</Text>
+                        <Text style={styles.stravaFooterSub}> • ATHLETICS OF THE MIND</Text>
+                      </View>
+                      <Text style={styles.stravaPassTag}>ADTU VERIFIED PASS ✓</Text>
+                    </View>
                   </View>
-                )}
-              </View>
+                );
+              })()}
 
               {/* Action Buttons */}
               <View style={styles.shareActionRow}>
@@ -2320,138 +2438,273 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     marginBottom: 10,
   },
-  bannerPreviewCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+  // Strava-Inspired Preview Card Styles
+  stravaPreviewCard: {
+    backgroundColor: '#0D1117',
+    borderRadius: 22,
     borderWidth: 1.5,
-    borderColor: '#0E6245',
-    padding: 18,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    overflow: 'hidden',
+    padding: 16,
     marginBottom: 16,
-    shadowColor: '#0E6245',
+    shadowColor: '#FC5200',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 4,
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  bannerPreviewHeader: {
+  stravaTopAccent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    backgroundColor: '#FC5200',
+  },
+  stravaHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+    gap: 8,
+    marginTop: 4,
+    marginBottom: 10,
   },
-  bannerPreviewBadge: {
-    backgroundColor: '#0E6245',
-    borderRadius: 10,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-  },
-  bannerPreviewBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  bannerTypePill: {
-    backgroundColor: '#18201D',
-    borderRadius: 10,
-    paddingVertical: 4,
+  stravaActivityBadge: {
+    backgroundColor: '#FC5200',
+    borderRadius: 8,
+    paddingVertical: 3,
     paddingHorizontal: 8,
   },
-  bannerPreviewType: {
+  stravaActivityBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  stravaVerifiedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 8,
+    paddingVertical: 3,
+    paddingHorizontal: 7,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  stravaPulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+    marginRight: 5,
+  },
+  stravaVerifiedPillText: {
+    color: '#F8FAFC',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  stravaDateText: {
+    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '700',
+    marginLeft: 'auto',
+  },
+  stravaTitle: {
+    color: '#FFFFFF',
+    fontSize: 19,
+    fontWeight: '900',
+    letterSpacing: -0.4,
+    marginBottom: 2,
+  },
+  stravaSubTitle: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  stravaPolylineBox: {
+    marginVertical: 4,
+    width: '100%',
+  },
+  stravaStatsGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#161B22',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 12,
+  },
+  stravaStatCol: {
+    flex: 1,
+  },
+  stravaBigNumber: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  stravaUnitNumber: {
+    color: '#FC5200',
+    fontSize: 12,
+    fontWeight: '800',
+    marginLeft: 2,
+  },
+  stravaStatLabel: {
+    color: '#94A3B8',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginTop: 2,
+  },
+  stravaGridDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    marginHorizontal: 8,
+  },
+  stravaMentorsSection: {
+    marginBottom: 10,
+  },
+  stravaMentorsHeading: {
+    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    marginBottom: 6,
+  },
+  stravaMentorsList: {
+    gap: 6,
+  },
+  stravaMentorChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#161B22',
+    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  stravaMentorAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  stravaMentorAvatarText: {
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '800',
   },
-  bannerPreviewTitle: {
-    color: '#111827',
-    fontSize: 20,
-    fontWeight: '800',
-    marginBottom: 12,
-    letterSpacing: -0.4,
-  },
-  bannerHostRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    backgroundColor: '#F8FAF9',
-    borderRadius: 14,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8E5',
-  },
-  bannerAvatarCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#0E6245',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  bannerAvatarText: {
+  stravaMentorName: {
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  bannerHostRealName: {
-    color: '#111827',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
   },
-  bannerHostUsername: {
-    color: '#0E6245',
-    fontSize: 11,
-    fontWeight: '600',
+  stravaMentorUser: {
+    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '500',
   },
-  bannerSkillsRow: {
+  stravaRolePill: {
+    borderRadius: 8,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+  },
+  stravaRolePillText: {
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  stravaSkillsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    marginBottom: 10,
+    marginBottom: 8,
   },
-  bannerSkillTag: {
-    backgroundColor: '#EBF7F0',
-    borderRadius: 10,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-  },
-  bannerSkillTagText: {
-    color: '#0E6245',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  bannerSubTag: {
-    backgroundColor: '#F8FAF9',
-    borderRadius: 10,
-    paddingVertical: 4,
+  stravaSkillPill: {
+    backgroundColor: 'rgba(252, 82, 0, 0.15)',
+    borderRadius: 8,
+    paddingVertical: 3,
     paddingHorizontal: 8,
     borderWidth: 1,
-    borderColor: '#E2E8E5',
+    borderColor: 'rgba(252, 82, 0, 0.3)',
   },
-  bannerSubTagText: {
-    color: '#5A6561',
-    fontSize: 11,
+  stravaSkillPillText: {
+    color: '#FF7A00',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  stravaSubSkillPill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 8,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  stravaSubSkillPillText: {
+    color: '#E2E8F0',
+    fontSize: 10,
     fontWeight: '600',
   },
-  bannerMetaDivider: {
-    height: 1,
-    backgroundColor: '#E2E8E5',
-    marginVertical: 10,
-  },
-  bannerMetaItem: {
+  stravaLocationBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    backgroundColor: '#161B22',
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
   },
-  bannerMetaText: {
-    color: '#374151',
-    fontSize: 12,
+  stravaLocationText: {
+    color: '#E2E8F0',
+    fontSize: 11,
+    fontWeight: '600',
+    flex: 1,
+  },
+  stravaFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  stravaLogoSquare: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
+    backgroundColor: '#FC5200',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 4,
+  },
+  stravaLogoLetter: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '900',
+  },
+  stravaFooterBrand: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  stravaFooterSub: {
+    color: '#64748B',
+    fontSize: 9,
     fontWeight: '600',
   },
-  bannerMetaTextCredit: {
-    color: '#0E6245',
-    fontSize: 12,
-    fontWeight: '700',
+  stravaPassTag: {
+    color: '#10B981',
+    fontSize: 9,
+    fontWeight: '800',
   },
   shareActionRow: {
     flexDirection: 'row',

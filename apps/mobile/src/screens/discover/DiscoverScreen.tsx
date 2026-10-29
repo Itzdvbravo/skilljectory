@@ -10,6 +10,7 @@ import {
   RefreshControl,
   Modal,
   Alert,
+  Image,
 } from 'react-native';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
@@ -30,6 +31,8 @@ import {
   Compass,
   ArrowUpRight,
   Plus,
+  X,
+  UserCheck,
 } from 'lucide-react-native';
 import { BrandUnderline } from '../../components/common/ThemeSystem';
 
@@ -39,6 +42,8 @@ export const DiscoverScreen = ({ navigation }: any) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [formatFilter, setFormatFilter] = useState<'all' | 'workshops' | 'multi' | 'one_to_one'>('all');
+  const [matchingUsers, setMatchingUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
   // Private Code Modal
   const [codeModalOpen, setCodeModalOpen] = useState(false);
@@ -49,6 +54,11 @@ export const DiscoverScreen = ({ navigation }: any) => {
 
   useEffect(() => {
     fetchOpenSessions();
+    if (query.trim().length > 0) {
+      fetchUsers();
+    } else {
+      setMatchingUsers([]);
+    }
   }, [query]);
 
   const fetchOpenSessions = async () => {
@@ -59,6 +69,18 @@ export const DiscoverScreen = ({ navigation }: any) => {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      setLoadingUsers(true);
+      const data = await api.searchMentors(query).catch(() => []);
+      setMatchingUsers(data || []);
+    } catch {
+      setMatchingUsers([]);
+    } finally {
+      setLoadingUsers(false);
     }
   };
 
@@ -101,15 +123,70 @@ export const DiscoverScreen = ({ navigation }: any) => {
 
     if (!query.trim()) return true;
     const q = query.toLowerCase().trim();
-    const matchTitle = (s.title || '').toLowerCase().includes(q);
-    const matchSkill = (s.skillName || '').toLowerCase().includes(q);
-    const matchDesc = (s.description || '').toLowerCase().includes(q);
-    const matchHost =
-      (s.hostName || '').toLowerCase().includes(q) ||
-      (s.hostUsername || '').toLowerCase().includes(q);
-    const matchTags = (s.skillsTags || []).some((t) => t.toLowerCase().includes(q));
+    const cleanQ = q.replace(/^@+/, '').trim();
 
-    return matchTitle || matchSkill || matchDesc || matchHost || matchTags;
+    const matchTitle =
+      (s.title || '').toLowerCase().includes(q) ||
+      (cleanQ ? (s.title || '').toLowerCase().includes(cleanQ) : false);
+
+    const matchSkill =
+      (s.skillName || '').toLowerCase().includes(q) ||
+      (cleanQ ? (s.skillName || '').toLowerCase().includes(cleanQ) : false);
+
+    const matchDesc =
+      (s.description || '').toLowerCase().includes(q) ||
+      (cleanQ ? (s.description || '').toLowerCase().includes(cleanQ) : false);
+
+    // Host matching by name or username (support with or without leading @)
+    const hostName = (s.hostName || '').toLowerCase();
+    const hostUser = (s.hostUsername || '').toLowerCase();
+    const matchHost =
+      hostName.includes(q) ||
+      hostUser.includes(q) ||
+      (cleanQ ? hostName.includes(cleanQ) || hostUser.includes(cleanQ) : false);
+
+    // Co-mentors matching (multi-host/multi-mentor)
+    const matchMentors = (s.mentors || []).some((m) => {
+      const mName = (m.name || '').toLowerCase();
+      const mUser = (m.username || '').toLowerCase();
+      return (
+        mName.includes(q) ||
+        mUser.includes(q) ||
+        (cleanQ ? mName.includes(cleanQ) || mUser.includes(cleanQ) : false)
+      );
+    });
+
+    // Target learner matching
+    const targetLearner = (s.targetLearnerName || '').toLowerCase();
+    const matchTargetLearner =
+      targetLearner.includes(q) ||
+      (cleanQ ? targetLearner.includes(cleanQ) : false);
+
+    // Participants / learners matching
+    const matchParticipants = (s.participants || []).some((p) => {
+      const pName = (p.name || '').toLowerCase();
+      const pUser = (p.username || '').toLowerCase();
+      return (
+        pName.includes(q) ||
+        pUser.includes(q) ||
+        (cleanQ ? pName.includes(cleanQ) || pUser.includes(cleanQ) : false)
+      );
+    });
+
+    const matchTags = (s.skillsTags || []).some(
+      (t) => t.toLowerCase().includes(q) || (cleanQ ? t.toLowerCase().includes(cleanQ) : false)
+    );
+
+    return (
+      matchTitle ||
+      matchSkill ||
+      matchDesc ||
+      matchHost ||
+      matchMentors ||
+      matchTargetLearner ||
+      matchParticipants ||
+      matchTags
+    );
   });
 
   const getInitials = (name?: string) => {
@@ -190,12 +267,89 @@ export const DiscoverScreen = ({ navigation }: any) => {
         <Search size={18} color="#6B7280" style={{ marginRight: 10 }} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search by topic, skill or mentor"
+          placeholder="Search by topic, skill, mentor or @username"
           placeholderTextColor="#9CA3AF"
           value={query}
           onChangeText={setQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
         />
+        {query.length > 0 && (
+          <TouchableOpacity
+            onPress={() => setQuery('')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{ padding: 2 }}
+          >
+            <X size={16} color="#9CA3AF" />
+          </TouchableOpacity>
+        )}
       </View>
+
+      {/* Campus Mentors & Peers Section (matches user names / usernames) */}
+      {query.trim().length > 0 && (
+        <View style={styles.usersSection}>
+          <View style={styles.usersSectionHeader}>
+            <Text style={styles.sectionTitle}>
+              CAMPUS MENTORS & PEERS ({matchingUsers.length})
+            </Text>
+          </View>
+          {loadingUsers ? (
+            <ActivityIndicator size="small" color="#0E6245" style={{ marginVertical: 12 }} />
+          ) : matchingUsers.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.usersScrollContainer}
+            >
+              {matchingUsers.map((u) => (
+                <TouchableOpacity
+                  key={u.id}
+                  style={styles.userCard}
+                  activeOpacity={0.88}
+                  onPress={() => navigation.navigate('Showcase', { userId: u.id })}
+                >
+                  <View style={styles.userCardTop}>
+                    {u.avatarUrl ? (
+                      <Image source={{ uri: u.avatarUrl }} style={styles.userAvatarImage} />
+                    ) : (
+                      <View style={styles.userAvatarCircle}>
+                        <Text style={styles.userAvatarText}>{getInitials(u.name)}</Text>
+                      </View>
+                    )}
+                    <View style={styles.userInfo}>
+                      <Text style={styles.userNameText} numberOfLines={1}>
+                        {u.name}
+                      </Text>
+                      <Text style={styles.userHandleText} numberOfLines={1}>
+                        @{u.username}
+                      </Text>
+                    </View>
+                  </View>
+                  {u.bio ? (
+                    <Text style={styles.userBioText} numberOfLines={2}>
+                      {u.bio}
+                    </Text>
+                  ) : (
+                    <Text style={styles.userBioText} numberOfLines={1}>
+                      Campus Peer · Verified Mentor
+                    </Text>
+                  )}
+                  <View style={styles.userActionRow}>
+                    <Text style={styles.userActionText}>View portfolio</Text>
+                    <ArrowUpRight size={13} color="#0E6245" style={{ marginLeft: 3 }} />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.noUsersBox}>
+              <Text style={styles.noUsersText}>
+                No direct mentor matches for "{query.trim()}". Searching active sessions below:
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Filter Chips Row (Page 1 Artboard) */}
       <ScrollView
@@ -313,8 +467,29 @@ export const DiscoverScreen = ({ navigation }: any) => {
               {/* Title & Mentor */}
               <Text style={styles.cardTitle}>{session.skillName || session.title}</Text>
               <Text style={styles.mentorText}>
-                Mentored by {session.hostName || session.hostUsername || 'Campus Administrator'}
+                Mentored by <Text style={styles.mentorNameHighlight}>{session.hostName || 'Campus Administrator'}</Text>
+                {session.hostUsername ? <Text style={styles.mentorHandle}> (@{session.hostUsername})</Text> : null}
               </Text>
+
+              {/* Co-mentors (Multi-host) */}
+              {session.mentors && session.mentors.length > 0 && (
+                <View style={styles.mentorMetaCapsule}>
+                  <Users size={12} color="#0E6245" style={{ marginRight: 5 }} />
+                  <Text style={styles.mentorMetaText} numberOfLines={1}>
+                    Co-hosts: {session.mentors.map((m) => `${m.name}${m.username ? ` (@${m.username})` : ''}`).join(', ')}
+                  </Text>
+                </View>
+              )}
+
+              {/* 1-on-1 Target Learner */}
+              {session.sessionType === SessionType.ONE_TO_ONE && session.targetLearnerName && (
+                <View style={styles.mentorMetaCapsule}>
+                  <UserCheck size={12} color="#0E6245" style={{ marginRight: 5 }} />
+                  <Text style={styles.mentorMetaText} numberOfLines={1}>
+                    Learner: {session.targetLearnerName}
+                  </Text>
+                </View>
+              )}
 
               {/* Date Capsule Banner */}
               <View style={styles.whiteCapsuleRow}>
@@ -721,5 +896,123 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 14,
+  },
+  // Campus Mentors & Peers Section
+  usersSection: {
+    marginBottom: 20,
+  },
+  usersSectionHeader: {
+    marginBottom: 10,
+  },
+  usersScrollContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingRight: 10,
+  },
+  userCard: {
+    width: 200,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  userCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  userAvatarImage: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    marginRight: 10,
+  },
+  userAvatarCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#D8F3E5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  userAvatarText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0E6245',
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userNameText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  userHandleText: {
+    fontSize: 12,
+    color: '#0E6245',
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  userBioText: {
+    fontSize: 11,
+    color: '#6B7280',
+    lineHeight: 15,
+    marginBottom: 10,
+  },
+  userActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    paddingTop: 8,
+  },
+  userActionText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0E6245',
+  },
+  noUsersBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+  },
+  noUsersText: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  mentorNameHighlight: {
+    color: '#111827',
+    fontWeight: '700',
+  },
+  mentorHandle: {
+    color: '#0E6245',
+    fontWeight: '600',
+  },
+  mentorMetaCapsule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.04)',
+  },
+  mentorMetaText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+    flex: 1,
   },
 });

@@ -567,6 +567,9 @@ router.post('/export/banner-png', optionalAuthMiddleware, async (req: Request, r
           meetingLink: session.meetingLink,
           locationAddress: session.locationAddress,
           skillsTags: session.skillsTags,
+          participantsCount: params.participantsCount ?? session.participantsCount ?? (session.participants?.length || 0),
+          maxParticipants: params.maxParticipants ?? session.maxParticipants ?? 15,
+          mentors: params.mentors ?? session.mentors,
         };
       }
     }

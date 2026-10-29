@@ -12,6 +12,14 @@ export interface BannerExportParams {
   meetingLink?: string;
   locationAddress?: string;
   skillsTags?: string[];
+  participantsCount?: number;
+  maxParticipants?: number;
+  mentors?: Array<{
+    name?: string;
+    username?: string;
+    status?: string;
+    mentor?: { name?: string; username?: string };
+  }>;
   showCredit?: boolean;
   showLocation?: boolean;
   showDateTime?: boolean;
@@ -91,6 +99,9 @@ export class ExportService {
   /**
    * Generates a genuine high-resolution PNG for Session Event Banner (Artboard Page 19)
    */
+  /**
+   * Generates a genuine high-resolution PNG for Session Event Banner (Strava-Inspired Artboard)
+   */
   static async generateBannerPng(params: BannerExportParams): Promise<{ buffer: Buffer; base64: string; fileName: string }> {
     const title = this.escapeXml(params.title || params.skillName || 'Campus Skill Exchange Session');
     const skillName = this.escapeXml(params.skillName || 'Skill');
@@ -115,11 +126,15 @@ export class ExportService {
       minute: '2-digit',
     });
 
+    const isGroup = params.sessionType === 'group' || params.sessionType === 'GROUP';
+    const isMultiMentor = params.sessionType === 'multi_mentor' || params.sessionType === 'MULTI_MENTOR';
+    const isGroupOrMulti = isGroup || isMultiMentor;
+
     const formatLabel =
-      params.sessionType === 'one_to_one'
+      params.sessionType === 'one_to_one' || params.sessionType === 'ONE_TO_ONE'
         ? '1-ON-1 MENTORSHIP'
-        : params.sessionType === 'multi_mentor'
-        ? 'MULTI-HOST COLLABORATIVE'
+        : isMultiMentor
+        ? 'MULTI-HOST COLLABORATION'
         : 'GROUP WORKSHOP';
 
     const showCredit = params.showCredit !== false;
@@ -128,102 +143,242 @@ export class ExportService {
     const showHostTag = params.showHostTag !== false;
     const showSkills = params.showSkills !== false;
 
+    const currentStudents = params.participantsCount ?? 0;
+    const maxStudents = params.maxParticipants || 15;
+
+    // Collect all unique mentors (Host + Co-Mentors)
+    const mentorsList: Array<{ name: string; username: string; isHost: boolean; status?: string }> = [
+      { name: hostName, username: hostUsername, isHost: true },
+    ];
+
+    if (Array.isArray(params.mentors)) {
+      params.mentors.forEach((m: any) => {
+        const mName = m.name || m.mentor?.name || m.username || m.mentor?.username;
+        const mUser = m.username || m.mentor?.username || '';
+        if (mName && mName.toLowerCase() !== hostName.toLowerCase()) {
+          mentorsList.push({
+            name: this.escapeXml(mName),
+            username: this.escapeXml(mUser),
+            isHost: false,
+            status: m.status,
+          });
+        }
+      });
+    }
+
     const tags = (params.skillsTags || [skillName]).slice(0, 4);
 
-    const tagsSvg = showSkills
+    // Dynamic Strava-style Stat Grid
+    // Column 1: Students count (or 1-on-1 format)
+    // Column 2: Duration
+    // Column 3: Credits/Value
+    // Column 4: Elevation/Quality
+    const stat1Value = isGroupOrMulti ? `${currentStudents}` : '1-ON-1';
+    const stat1Sub = isGroupOrMulti ? `/${maxStudents} STUDENTS` : 'FORMAT';
+    const stat1Label = isGroupOrMulti ? 'LEARNERS ATTENDED' : 'MENTORSHIP TYPE';
+
+    const stat2Value = `${params.durationHours || 1}`;
+    const stat2Sub = 'HRS';
+    const stat2Label = 'SESSION DURATION';
+
+    const stat3Value = `+${params.durationHours || 1}`;
+    const stat3Sub = 'CR';
+    const stat3Label = 'ACADEMIC TIME-CREDIT';
+
+    // Mentors Cards SVG
+    const mentorCardWidth = Math.min(320, Math.floor(1080 / Math.max(1, mentorsList.length)));
+    const mentorsSvg = showHostTag
+      ? `
+      <g transform="translate(60, 400)">
+        <text x="0" y="0" fill="#94A3B8" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="12" letter-spacing="1.5">
+          ${isGroupOrMulti ? `SESSION MENTORS (${mentorsList.length})` : 'HOST MENTOR'}
+        </text>
+        <g transform="translate(0, 15)">
+          ${mentorsList
+            .slice(0, 4)
+            .map((mentor, i) => {
+              const xPos = i * (mentorCardWidth + 16);
+              const initials = mentor.name
+                .split(' ')
+                .map((w) => w[0])
+                .join('')
+                .substring(0, 2)
+                .toUpperCase();
+              const badgeFill = mentor.isHost ? '#FC5200' : '#0284C7';
+              const badgeLabel = mentor.isHost ? 'Host' : 'Co-Mentor';
+
+              return `
+              <g transform="translate(${xPos}, 0)">
+                <rect width="${mentorCardWidth}" height="68" rx="16" fill="#161B22" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
+                <circle cx="34" cy="34" r="20" fill="${badgeFill}"/>
+                <text x="34" y="40" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="900" font-size="13" text-anchor="middle">${initials}</text>
+                <text x="64" y="30" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="800" font-size="15">${mentor.name}</text>
+                <text x="64" y="48" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="600" font-size="12">@${mentor.username || 'mentor'}</text>
+                <rect x="${mentorCardWidth - 85}" y="20" width="75" height="26" rx="13" fill="${badgeFill}20" stroke="${badgeFill}60" stroke-width="1"/>
+                <text x="${mentorCardWidth - 47.5}" y="37" fill="${mentor.isHost ? '#FF7A00' : '#38BDF8'}" font-family="system-ui, sans-serif" font-weight="800" font-size="11" text-anchor="middle">${badgeLabel}</text>
+              </g>`;
+            })
+            .join('')}
+        </g>
+      </g>`
+      : '';
+
+    // Tags & Location Row (Y=525)
+    const tagsRowSvg = showSkills
       ? tags
           .map(
             (tag, i) => `
-        <g transform="translate(${60 + i * 180}, 385)">
-          <rect width="165" height="36" rx="18" fill="#EBF7F0" stroke="#0E6245" stroke-width="1.5"/>
-          <text x="82.5" y="23" fill="#0E6245" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="14" text-anchor="middle">#${this.escapeXml(tag)}</text>
+        <g transform="translate(${i * 155}, 0)">
+          <rect width="145" height="34" rx="17" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+          <text x="72.5" y="22" fill="#F8FAFC" font-family="system-ui, sans-serif" font-weight="700" font-size="13" text-anchor="middle">#${this.escapeXml(tag)}</text>
         </g>`
           )
           .join('')
       : '';
 
-    const hostRowSvg = showHostTag
-      ? `
-      <g transform="translate(60, 290)">
-        <rect width="700" height="70" rx="16" fill="#F8FAF9" stroke="#E2E8E5" stroke-width="1.5"/>
-        <circle cx="45" cy="35" r="22" fill="#0E6245"/>
-        <text x="45" y="42" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="800" font-size="15" text-anchor="middle">CA</text>
-        <text x="80" y="32" fill="#111827" font-family="system-ui, sans-serif" font-weight="800" font-size="17">${hostName}</text>
-        <text x="80" y="52" fill="#0E6245" font-family="system-ui, sans-serif" font-weight="600" font-size="13">@${hostUsername}</text>
-        <rect x="580" y="20" width="105" height="30" rx="15" fill="#EBF7F0"/>
-        <text x="632" y="40" fill="#0E6245" font-family="system-ui, sans-serif" font-weight="700" font-size="12" text-anchor="middle">Primary Host</text>
-      </g>`
-      : '';
-
-    let metaY = 450;
-    const metaItems: string[] = [];
-
-    if (showDateTime) {
-      metaItems.push(`
-        <g transform="translate(60, ${metaY})">
-          <circle cx="16" cy="16" r="16" fill="#EBF7F0"/>
-          <text x="16" y="22" fill="#0E6245" font-family="system-ui, sans-serif" font-size="16" text-anchor="middle">📅</text>
-          <text x="44" y="22" fill="#111827" font-family="system-ui, sans-serif" font-weight="700" font-size="16">${dateStr} at ${timeStr} • ${params.durationHours} Hours</text>
-        </g>`);
-      metaY += 50;
-    }
-
-    if (showLocation) {
-      metaItems.push(`
-        <g transform="translate(60, ${metaY})">
-          <circle cx="16" cy="16" r="16" fill="#FEF7DA"/>
-          <text x="16" y="22" fill="#854D0E" font-family="system-ui, sans-serif" font-size="16" text-anchor="middle">📍</text>
-          <text x="44" y="22" fill="#374151" font-family="system-ui, sans-serif" font-weight="600" font-size="15">${locationText}</text>
-        </g>`);
-      metaY += 50;
-    }
-
-    if (showCredit) {
-      metaItems.push(`
-        <g transform="translate(60, ${metaY})">
-          <circle cx="16" cy="16" r="16" fill="#EBF7F0"/>
-          <text x="16" y="22" fill="#0E6245" font-family="system-ui, sans-serif" font-size="16" text-anchor="middle">🪙</text>
-          <text x="44" y="22" fill="#0E6245" font-family="system-ui, sans-serif" font-weight="800" font-size="16">Time-Credit Fee / Earn: ${params.durationHours} Credit(s)</text>
-        </g>`);
-      metaY += 50;
-    }
-
     const svg = `
     <svg width="1200" height="750" viewBox="0 0 1200 750" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <!-- Background & Outer Border -->
-      <rect width="1200" height="750" rx="32" fill="#F8FAF9"/>
-      <rect x="24" y="24" width="1152" height="702" rx="26" fill="#FFFFFF" stroke="#0E6245" stroke-width="4"/>
-      
-      <!-- Top Campus Header Accent -->
-      <path d="M26 48C26 35.8497 35.8497 26 48 26H1152C1164.15 26 1174 35.8497 1174 48V60H26V48Z" fill="#0E6245"/>
-      <text x="60" y="48" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="800" font-size="12" letter-spacing="1.5">ASSAM DOWN TOWN UNIVERSITY • CAMPUS SKILL EXCHANGE</text>
+      <defs>
+        <!-- Strava Sunset Gradient -->
+        <linearGradient id="stravaGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#FC5200" />
+          <stop offset="100%" stop-color="#FF7A00" />
+        </linearGradient>
 
-      <!-- Badge row -->
-      <rect x="60" y="90" width="240" height="34" rx="17" fill="#0E6245"/>
-      <text x="180" y="112" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="800" font-size="12" text-anchor="middle" letter-spacing="0.8">CAMPUS SKILL EXCHANGE PASS</text>
-      
-      <rect x="315" y="90" width="180" height="34" rx="17" fill="#18201D"/>
-      <text x="405" y="112" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="800" font-size="12" text-anchor="middle">${formatLabel}</text>
+        <!-- Elevation Profile Gradient Area -->
+        <linearGradient id="elevationAreaGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#FC5200" stop-opacity="0.32"/>
+          <stop offset="100%" stop-color="#FC5200" stop-opacity="0.0"/>
+        </linearGradient>
+
+        <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#161B22"/>
+          <stop offset="100%" stop-color="#0E131A"/>
+        </linearGradient>
+      </defs>
+
+      <!-- Deep Obsidian Athletic Background -->
+      <rect width="1200" height="750" rx="36" fill="#0D1117"/>
+      <rect x="20" y="20" width="1160" height="710" rx="30" fill="url(#cardGrad)" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+
+      <!-- Strava Top Accent Bar -->
+      <path d="M22 46C22 32.7452 32.7452 22 46 22H1154C1167.25 22 1178 32.7452 1178 46V54H22V46Z" fill="url(#stravaGrad)"/>
+
+      <!-- Header Pills Row -->
+      <g transform="translate(60, 75)">
+        <!-- Activity Type Pill -->
+        <rect width="180" height="34" rx="17" fill="#FC5200"/>
+        <text x="90" y="22" fill="#FFFFFF" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="12" text-anchor="middle" letter-spacing="0.8">⚡ ${formatLabel}</text>
+
+        <!-- Campus Verified Pill with Pulsing Live Dot -->
+        <rect x="195" y="0" width="205" height="34" rx="17" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+        <circle cx="215" cy="17" r="5" fill="#10B981"/>
+        <text x="230" y="22" fill="#F8FAFC" font-family="system-ui, sans-serif" font-weight="800" font-size="12" letter-spacing="0.5">ADTU VERIFIED EVENT</text>
+
+        <!-- Date & Time Right Aligned -->
+        <text x="1080" y="23" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="700" font-size="14" text-anchor="end">${dateStr} • ${timeStr}</text>
+      </g>
 
       <!-- Event Title -->
-      <text x="60" y="180" fill="#111827" font-family="system-ui, sans-serif" font-weight="900" font-size="36" letter-spacing="-0.5">${title}</text>
-      <text x="60" y="220" fill="#5A6561" font-family="system-ui, sans-serif" font-weight="500" font-size="17">Peer-to-peer knowledge session conducted on campus time-credit network</text>
+      <text x="60" y="160" fill="#FFFFFF" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="38" letter-spacing="-0.8">${title}</text>
+      <text x="60" y="194" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="500" font-size="16">Assam Down Town University • Peer-to-Peer Academic Knowledge Network</text>
 
-      <line x1="60" y1="250" x2="1140" y2="250" stroke="#E2E8E5" stroke-width="1.5"/>
+      <!-- Strava Dynamic Elevation / Trajectory Polyline -->
+      <g transform="translate(60, 210)">
+        <!-- Area fill under route -->
+        <path d="M 0 45 Q 160 10, 320 35 T 600 15 T 860 38 L 1080 8 L 1080 65 L 0 65 Z" fill="url(#elevationAreaGrad)"/>
+        <!-- Polyline curve -->
+        <path d="M 0 45 Q 160 10, 320 35 T 600 15 T 860 38 L 1080 8" stroke="#FC5200" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+        <!-- Elevation waypoint nodes -->
+        <circle cx="320" cy="35" r="4.5" fill="#FC5200"/>
+        <circle cx="600" cy="15" r="4.5" fill="#FC5200"/>
+        <circle cx="860" cy="38" r="4.5" fill="#FC5200"/>
+        <circle cx="1080" cy="8" r="6" fill="#FFFFFF" stroke="#FC5200" stroke-width="3"/>
+      </g>
 
-      <!-- Host Row -->
-      ${hostRowSvg}
+      <!-- =========================================================================
+           STRAVA BIG METRICS GRID (The Signature Feature)
+      ========================================================================= -->
+      <g transform="translate(60, 275)">
+        <rect width="1080" height="100" rx="18" fill="#161B22" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
 
-      <!-- Skills Tags -->
-      ${tagsSvg}
+        <!-- Stat 1: Student Attendees / Format -->
+        <g transform="translate(35, 20)">
+          <text x="0" y="40" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="900" font-size="${isGroupOrMulti ? '42' : '30'}">${stat1Value}</text>
+          <text x="${isGroupOrMulti ? '65' : '150'}" y="38" fill="#FC5200" font-family="system-ui, sans-serif" font-weight="800" font-size="18">${stat1Sub}</text>
+          <text x="0" y="66" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="800" font-size="11" letter-spacing="1.2">${stat1Label}</text>
+        </g>
 
-      <!-- Meta Info Rows -->
-      ${metaItems.join('')}
+        <!-- Divider 1 -->
+        <line x1="300" y1="20" x2="300" y2="80" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
 
-      <!-- Watermark / Footer -->
-      <line x1="60" y1="670" x2="1140" y2="670" stroke="#E2E8E5" stroke-width="1.5"/>
-      <text x="60" y="698" fill="#9CA3AF" font-family="system-ui, sans-serif" font-weight="600" font-size="12">VERIFIED EVENT PASS • GENERATED VIA SKILLJECTORY PLATFORM</text>
-      <text x="1140" y="698" fill="#0E6245" font-family="system-ui, sans-serif" font-weight="800" font-size="13" text-anchor="end">ADTU CAMPUS NETWORK ✓</text>
+        <!-- Stat 2: Duration Hours -->
+        <g transform="translate(335, 20)">
+          <text x="0" y="40" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="900" font-size="42">${stat2Value}</text>
+          <text x="50" y="38" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="800" font-size="18">${stat2Sub}</text>
+          <text x="0" y="66" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="800" font-size="11" letter-spacing="1.2">${stat2Label}</text>
+        </g>
+
+        <!-- Divider 2 -->
+        <line x1="570" y1="20" x2="570" y2="80" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+
+        <!-- Stat 3: Credits Generated -->
+        <g transform="translate(605, 20)">
+          <text x="0" y="40" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="900" font-size="42">${stat3Value}</text>
+          <text x="65" y="38" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="800" font-size="18">${stat3Sub}</text>
+          <text x="0" y="66" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="800" font-size="11" letter-spacing="1.2">${stat3Label}</text>
+        </g>
+
+        <!-- Divider 3 -->
+        <line x1="840" y1="20" x2="840" y2="80" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+
+        <!-- Stat 4: Rating / Quality Level -->
+        <g transform="translate(875, 20)">
+          <text x="0" y="40" fill="#10B981" font-family="system-ui, sans-serif" font-weight="900" font-size="34">VERIFIED</text>
+          <text x="0" y="66" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="800" font-size="11" letter-spacing="1.2">CAMPUS PEER NETWORK</text>
+        </g>
+      </g>
+
+      <!-- =========================================================================
+           MENTORS SECTION (Shows ALL Mentors)
+      ========================================================================= -->
+      ${mentorsSvg}
+
+      <!-- Topic Skills & Location Bar (Y=520) -->
+      <g transform="translate(60, 520)">
+        <!-- Skill tags -->
+        <g transform="translate(0, 0)">
+          ${tagsRowSvg}
+        </g>
+
+        <!-- Location Badge -->
+        ${
+          showLocation
+            ? `
+        <g transform="translate(640, 0)">
+          <rect width="440" height="34" rx="17" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+          <text x="20" y="22" fill="#FC5200" font-family="system-ui, sans-serif" font-size="14">📍</text>
+          <text x="44" y="22" fill="#E2E8F0" font-family="system-ui, sans-serif" font-weight="700" font-size="13">${locationText}</text>
+        </g>`
+            : ''
+        }
+      </g>
+
+      <!-- Strava-style Divider Line -->
+      <line x1="60" y1="655" x2="1140" y2="655" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+
+      <!-- Footer Brand Watermark -->
+      <g transform="translate(60, 680)">
+        <rect width="18" height="18" rx="4" fill="#FC5200"/>
+        <text x="9" y="14" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="900" font-size="11" text-anchor="middle">S</text>
+        <text x="28" y="15" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="900" font-size="15" letter-spacing="1.5">SKILLJECTORY</text>
+        <text x="165" y="15" fill="#64748B" font-family="system-ui, sans-serif" font-weight="700" font-size="12">• CAMPUS ATHLETICS OF THE MIND</text>
+      </g>
+
+      <!-- Right Footer Verification Seal -->
+      <g transform="translate(1140, 680)">
+        <text x="0" y="15" fill="#10B981" font-family="system-ui, sans-serif" font-weight="800" font-size="13" text-anchor="end">ADTU DIGITAL CERTIFIED PASS ✓</text>
+      </g>
     </svg>`.trim();
 
     const buffer = await sharp(Buffer.from(svg)).png({ compressionLevel: 9 }).toBuffer();
@@ -231,7 +386,7 @@ export class ExportService {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '_')
       .substring(0, 30);
-    const fileName = `SkillJectory_Pass_${cleanSlug}.png`;
+    const fileName = `SkillJectory_StravaPass_${cleanSlug}.png`;
 
     return {
       buffer,
