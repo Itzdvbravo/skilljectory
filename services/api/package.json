@@ -6,7 +6,7 @@
   "main": "dist/main.js",
   "scripts": {
     "dev": "tsx watch src/main.ts",
-    "build": "tsc",
+    "build": "npm run --prefix ../../packages/shared-types build && tsc",
     "postinstall": "prisma generate --schema=src/db/prisma/schema.prisma",
     "start": "node dist/main.js",
     "test": "vitest run",
