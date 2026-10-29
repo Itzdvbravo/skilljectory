@@ -1,0 +1,44 @@
+{
+  "name": "@skill-exchange/api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend API for Campus Skill Exchange Platform",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "test:credits": "vitest run test/credits.spec.ts",
+    "prisma:generate": "prisma generate --schema=src/db/prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema=src/db/prisma/schema.prisma",
+    "prisma:push": "prisma db push --schema=src/db/prisma/schema.prisma",
+    "seed": "tsx src/db/seed/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.12.1",
+    "@skill-exchange/shared-types": "*",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.3",
+    "sharp": "^0.33.3",
+    "uuid": "^9.0.1",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^20.12.7",
+    "@types/node-cron": "^3.0.11",
+    "@types/uuid": "^9.0.8",
+    "prisma": "^5.12.1",
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5",
+    "vitest": "^1.5.0"
+  }
+}

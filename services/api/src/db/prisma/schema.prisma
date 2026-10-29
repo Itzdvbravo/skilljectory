@@ -1,0 +1,490 @@
+// Campus Skill Exchange Platform — Prisma Schema
+// Database: PostgreSQL 15+
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum VerificationMethod {
+  email
+  manual_id
+}
+
+enum VerificationStatus {
+  pending
+  verified
+  lapsed
+  rejected
+}
+
+enum UserStatus {
+  active
+  lapsed_unverified
+  suspended
+}
+
+enum SocialPlatform {
+  instagram
+  x
+  linkedin
+  github
+  youtube
+  personal_site
+  other
+}
+
+enum CustomizationCategory {
+  theme
+  banner
+  badge_frame
+  layout
+  font
+}
+
+enum CustomizationUnlockType {
+  credits
+  sessions
+}
+
+enum CustomizationTier {
+  basic
+  advanced
+}
+
+enum NotificationType {
+  badge_unlocked
+  signup_bonus
+  session_milestone
+  customization_unlocked
+}
+
+enum SkillType {
+  teach
+  learn
+}
+
+enum SkillProficiency {
+  beginner
+  intermediate
+  advanced
+}
+
+enum SessionType {
+  one_to_one
+  group
+  multi_mentor
+}
+
+enum SessionStatus {
+  scheduled
+  in_progress
+  completed
+  cancelled
+  no_show
+}
+
+enum LocationMode {
+  online
+  offline
+  hybrid
+}
+
+enum ParticipantRole {
+  learner
+  mentor
+}
+
+enum ConfirmedBy {
+  self
+  host
+  mentor
+}
+
+enum LedgerTransactionType {
+  signup_bonus
+  session_earning
+  session_host_cost
+  mentor_host_cost
+  announcement_cost
+  monthly_refill
+  marketplace_sale
+  marketplace_purchase
+  blog_unlock_cost
+  profile_customization_cost
+  verification_dissolution
+}
+
+enum BadgeCriteriaType {
+  hours
+  rating
+}
+
+enum MaterialType {
+  pdf
+  ppt
+}
+
+enum BlogPostStatus {
+  draft
+  published
+}
+
+enum BlogInteractionType {
+  upvote
+  comment
+}
+
+enum BannerSourceType {
+  session
+  badge
+  achievement
+}
+
+model User {
+  id                             String                @id @default(uuid())
+  email                          String                @unique
+  username                       String?               @unique
+  password_hash                  String
+  name                           String
+  student_id                     String?               @unique
+  verification_method            VerificationMethod    @default(email)
+  verification_status            VerificationStatus    @default(pending)
+  verified_at                    DateTime?
+  verification_expires_at        DateTime?
+  signup_bonus_claimed           Boolean               @default(false)
+  free_announcements_used        Int                   @default(0)
+  free_announcement_window_start DateTime?
+  status                         UserStatus            @default(active)
+  credit_balance                 Float                 @default(0)
+  unlocked_blogging_at           DateTime?
+  created_at                     DateTime              @default(now())
+  updated_at                     DateTime              @updatedAt
+
+  profile                        Profile?
+  social_links                   UserSocialLink[]
+  customizations                 UserCustomization[]
+  notifications                  Notification[]
+  user_skills                    UserSkill[]
+  hosted_sessions                Session[]             @relation("HostSessions")
+  mentor_sessions                SessionMentor[]
+  session_participations         SessionParticipant[]
+  credit_ledger                  CreditLedger[]
+  user_badges                    UserBadge[]
+  materials                      Material[]            @relation("SellerMaterials")
+  material_purchases             MaterialPurchase[]    @relation("BuyerPurchases")
+  blog_posts                     BlogPost[]            @relation("AuthorPosts")
+  blog_interactions              BlogInteraction[]
+  social_banners                 SocialBanner[]
+
+  @@map("users")
+}
+
+model Profile {
+  id                       String   @id @default(uuid())
+  user_id                  String   @unique
+  bio                      String?
+  video_url                String?
+  avatar_url               String?
+  resume_export_prefs_json String?  @default("{}")
+  created_at               DateTime @default(now())
+  updated_at               DateTime @updatedAt
+
+  user                     User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model UserSocialLink {
+  id            String         @id @default(uuid())
+  user_id       String
+  platform      SocialPlatform
+  url           String
+  label         String?
+  display_order Int            @default(0)
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @updatedAt
+
+  user          User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, platform])
+  @@map("user_social_links")
+}
+
+model CustomizationOption {
+  id           String                  @id @default(uuid())
+  key          String                  @unique
+  label        String
+  category     CustomizationCategory
+  unlock_type  CustomizationUnlockType
+  unlock_value Float
+  tier         CustomizationTier
+  created_at   DateTime                @default(now())
+  updated_at   DateTime                @updatedAt
+
+  user_customizations UserCustomization[]
+
+  @@map("customization_options")
+}
+
+model UserCustomization {
+  id                      String              @id @default(uuid())
+  user_id                 String
+  customization_option_id String
+  unlocked_at             DateTime            @default(now())
+  active                  Boolean             @default(false)
+  created_at              DateTime            @default(now())
+  updated_at              DateTime            @updatedAt
+
+  user                    User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  option                  CustomizationOption @relation(fields: [customization_option_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, customization_option_id])
+  @@map("user_customizations")
+}
+
+model Notification {
+  id             String           @id @default(uuid())
+  user_id        String
+  type           NotificationType
+  reference_type String?
+  reference_id   String?
+  title          String
+  body           String
+  seen           Boolean          @default(false)
+  created_at     DateTime         @default(now())
+
+  user           User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model Skill {
+  id              String      @id @default(uuid())
+  name_normalized String      @unique
+  display_name    String
+  category        String
+  created_at      DateTime    @default(now())
+  updated_at      DateTime    @updatedAt
+
+  user_skills     UserSkill[]
+  sessions        Session[]
+  demand_reports  SkillDemandReport[]
+
+  @@map("skills")
+}
+
+model UserSkill {
+  id          String           @id @default(uuid())
+  user_id     String
+  skill_id    String
+  type        SkillType
+  proficiency SkillProficiency @default(beginner)
+  created_at  DateTime         @default(now())
+  updated_at  DateTime         @updatedAt
+
+  user        User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  skill       Skill            @relation(fields: [skill_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, skill_id, type])
+  @@map("user_skills")
+}
+
+model Session {
+  id                    String               @id @default(uuid())
+  host_id               String?
+  session_type          SessionType
+  skill_id              String
+  title                 String?
+  description           String?
+  skills_tags           String[]             @default([])
+  target_learner_name   String?
+  duration_hours        Float
+  status                SessionStatus        @default(scheduled)
+  scheduled_at          DateTime
+  location_mode         LocationMode
+  meeting_link          String?
+  location_address      String?
+  min_participants      Int                  @default(2)
+  max_participants      Int?                 @default(15)
+  is_private            Boolean              @default(false)
+  join_code             String?
+  announced_publicly    Boolean              @default(false)
+  announcement_was_free Boolean?
+  created_at            DateTime             @default(now())
+  updated_at            DateTime             @updatedAt
+
+  host                  User?                @relation("HostSessions", fields: [host_id], references: [id], onDelete: SetNull)
+  skill                 Skill                @relation(fields: [skill_id], references: [id], onDelete: Restrict)
+  mentors               SessionMentor[]
+  participants          SessionParticipant[]
+
+  @@map("sessions")
+}
+
+model SessionMentor {
+  session_id    String
+  mentor_id     String
+  credit_cost   Float                @default(1.5)
+  credit_earned Float?
+  status        String               @default("accepted")
+
+  session       Session              @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  mentor        User                 @relation(fields: [mentor_id], references: [id], onDelete: Cascade)
+
+  @@id([session_id, mentor_id])
+  @@map("session_mentors")
+}
+
+model SessionParticipant {
+  id                   String           @id @default(uuid())
+  session_id           String
+  user_id              String
+  role                 ParticipantRole  @default(learner)
+  attendance_confirmed Boolean          @default(false)
+  confirmed_by         ConfirmedBy?
+  rating               Int?
+  feedback_text        String?
+  is_anonymous         Boolean          @default(true)
+  created_at           DateTime         @default(now())
+  updated_at           DateTime         @updatedAt
+
+  session              Session          @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  user                 User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([session_id, user_id])
+  @@map("session_participants")
+}
+
+model CreditLedger {
+  id             String                @id @default(uuid())
+  user_id        String
+  amount         Float
+  balance_after  Float
+  type           LedgerTransactionType
+  reference_type String?
+  reference_id   String?
+  created_at     DateTime              @default(now())
+
+  user           User                  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("credit_ledger")
+}
+
+model Badge {
+  id            String            @id @default(uuid())
+  name          String            @unique
+  criteria_type BadgeCriteriaType
+  threshold     Float
+  created_at    DateTime          @default(now())
+  updated_at    DateTime          @updatedAt
+
+  user_badges   UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  id         String   @id @default(uuid())
+  user_id    String
+  badge_id   String
+  earned_at  DateTime @default(now())
+
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  badge      Badge    @relation(fields: [badge_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, badge_id])
+  @@map("user_badges")
+}
+
+model Material {
+  id            String             @id @default(uuid())
+  seller_id     String
+  title         String
+  file_url      String
+  price_credits Int                // Validated between 1 and 5
+  type          MaterialType
+  created_at    DateTime           @default(now())
+  updated_at    DateTime           @updatedAt
+
+  seller        User               @relation("SellerMaterials", fields: [seller_id], references: [id], onDelete: Cascade)
+  purchases     MaterialPurchase[]
+
+  @@map("materials")
+}
+
+model MaterialPurchase {
+  id           String   @id @default(uuid())
+  buyer_id     String
+  material_id  String
+  credits_paid Float
+  purchased_at DateTime @default(now())
+
+  buyer        User     @relation("BuyerPurchases", fields: [buyer_id], references: [id], onDelete: Cascade)
+  material     Material @relation(fields: [material_id], references: [id], onDelete: Cascade)
+
+  @@map("material_purchases")
+}
+
+model BlogPost {
+  id           String            @id @default(uuid())
+  author_id    String
+  title        String
+  content      String
+  media_urls   String[]          @default([])
+  status       BlogPostStatus    @default(draft)
+  published_at DateTime?
+  created_at   DateTime          @default(now())
+  updated_at   DateTime          @updatedAt
+
+  author       User              @relation("AuthorPosts", fields: [author_id], references: [id], onDelete: Cascade)
+  interactions BlogInteraction[]
+
+  @@map("blog_posts")
+}
+
+model BlogInteraction {
+  id           String              @id @default(uuid())
+  blog_id      String
+  user_id      String
+  type         BlogInteractionType
+  comment_text String?
+  created_at   DateTime            @default(now())
+
+  blog         BlogPost            @relation(fields: [blog_id], references: [id], onDelete: Cascade)
+  user         User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("blog_interactions")
+}
+
+model SocialBanner {
+  id           String           @id @default(uuid())
+  user_id      String
+  source_type  BannerSourceType
+  source_id    String?
+  image_url    String
+  generated_at DateTime         @default(now())
+
+  user         User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("social_banners")
+}
+
+model SkillDemandReport {
+  id           String   @id @default(uuid())
+  skill_id     String
+  period_start DateTime
+  period_end   DateTime
+  demand_score Float
+  rarity_score Float
+  sample_size  Int
+  generated_at DateTime @default(now())
+
+  skill        Skill    @relation(fields: [skill_id], references: [id], onDelete: Cascade)
+
+  @@map("skill_demand_reports")
+}
