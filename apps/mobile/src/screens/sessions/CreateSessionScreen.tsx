@@ -60,8 +60,9 @@ export const CreateSessionScreen = ({ navigation }: any) => {
   const [description, setDescription] = useState('');
   const [skillsTags, setSkillsTags] = useState<string[]>(['React Native', 'Mobile Engineering']);
   const [newSkillInput, setNewSkillInput] = useState('');
-  const [targetLearnerName, setTargetLearnerName] = useState('Chiranjib Das');
-  const [coHostUsername, setCoHostUsername] = useState('');
+  const [targetLearnerName, setTargetLearnerName] = useState('');
+  const [coHostUsernames, setCoHostUsernames] = useState<string[]>([]);
+  const [newCoHostInput, setNewCoHostInput] = useState('');
 
   // Date and Time selection
   const [calendarDate, setCalendarDate] = useState<Date>(() => {
@@ -81,6 +82,7 @@ export const CreateSessionScreen = ({ navigation }: any) => {
   const [durationHours, setDurationHours] = useState<SessionDurationHours>(1.5);
   const [locationMode, setLocationMode] = useState<LocationMode>(LocationMode.ONLINE);
   const [meetingLink, setMeetingLink] = useState('https://meet.google.com/abc-demo-room');
+  const [locationAddress, setLocationAddress] = useState('');
   const [announceToEveryone, setAnnounceToEveryone] = useState<boolean>(true);
 
   // Submit / Preview state
@@ -95,6 +97,22 @@ export const CreateSessionScreen = ({ navigation }: any) => {
     const m = parseInt(selectedMinute.replace(':', ''), 10) || 0;
     d.setHours(h, m, 0, 0);
     return d;
+  };
+
+  const handleAddCoHost = (input?: string) => {
+    const raw = (input !== undefined ? input : newCoHostInput).trim();
+    if (!raw) return;
+    const clean = raw.replace(/^@/, '').toLowerCase();
+    if (!clean || coHostUsernames.includes(clean)) {
+      setNewCoHostInput('');
+      return;
+    }
+    setCoHostUsernames([...coHostUsernames, clean]);
+    setNewCoHostInput('');
+  };
+
+  const handleRemoveCoHost = (username: string) => {
+    setCoHostUsernames(coHostUsernames.filter((u) => u !== username));
   };
 
   const handleAddSkill = (skill: string) => {
@@ -119,8 +137,24 @@ export const CreateSessionScreen = ({ navigation }: any) => {
         return;
       }
       if (sessionType === SessionType.ONE_TO_ONE && !targetLearnerName.trim()) {
-        Alert.alert('Target Student Required', 'Please specify the student you want to mentor.');
+        Alert.alert('Target Student Required', 'Please enter the name or @username of the student you want to mentor.');
         return;
+      }
+      if (sessionType === SessionType.MULTI_MENTOR) {
+        // Automatically add any pending input if the user typed without pressing Add
+        let activeCoHosts = [...coHostUsernames];
+        if (newCoHostInput.trim()) {
+          const clean = newCoHostInput.trim().replace(/^@/, '').toLowerCase();
+          if (clean && !activeCoHosts.includes(clean)) {
+            activeCoHosts.push(clean);
+            setCoHostUsernames(activeCoHosts);
+            setNewCoHostInput('');
+          }
+        }
+        if (activeCoHosts.length === 0) {
+          Alert.alert('Co-Host Required', 'Multi-host collaborative sessions require at least 1 co-host mentor username.');
+          return;
+        }
       }
       setCurrentStep(2);
     } else if (currentStep === 2) {
@@ -141,8 +175,32 @@ export const CreateSessionScreen = ({ navigation }: any) => {
       return;
     }
 
+    if ((locationMode === LocationMode.OFFLINE || locationMode === LocationMode.HYBRID) && !locationAddress.trim()) {
+      Alert.alert(
+        'Campus Location Required',
+        `Please provide the campus venue / room address for this ${locationMode === LocationMode.HYBRID ? 'hybrid' : 'in-person'} session.`
+      );
+      return;
+    }
+
+    if ((locationMode === LocationMode.ONLINE || locationMode === LocationMode.HYBRID) && !meetingLink.trim()) {
+      Alert.alert('Meeting Link Required', 'Please provide a valid online meeting link (Google Meet, Zoom, etc.).');
+      return;
+    }
+
     try {
       setSubmitLoading(true);
+
+      // Multi-host co-hosts list (ensure any pending text is also included)
+      let finalCoHosts = [...coHostUsernames];
+      if (sessionType === SessionType.MULTI_MENTOR && newCoHostInput.trim()) {
+        const clean = newCoHostInput.trim().replace(/^@/, '').toLowerCase();
+        if (clean && !finalCoHosts.includes(clean)) {
+          finalCoHosts.push(clean);
+        }
+      }
+
+      const shouldAnnounce = (sessionType !== SessionType.ONE_TO_ONE && !isPrivate) ? announceToEveryone : false;
 
       const session = await api.createSession({
         sessionType,
@@ -154,14 +212,15 @@ export const CreateSessionScreen = ({ navigation }: any) => {
         durationHours,
         scheduledAt: finalDate.toISOString(),
         locationMode,
-        meetingLink: locationMode !== LocationMode.OFFLINE ? meetingLink : undefined,
+        meetingLink: locationMode !== LocationMode.OFFLINE ? meetingLink.trim() : undefined,
+        locationAddress: locationMode !== LocationMode.ONLINE ? locationAddress.trim() : undefined,
         coMentorUsernames:
-          sessionType === SessionType.MULTI_MENTOR && coHostUsername.trim()
-            ? [coHostUsername.trim()]
+          sessionType === SessionType.MULTI_MENTOR && finalCoHosts.length > 0
+            ? finalCoHosts
             : undefined,
         maxParticipants: sessionType === SessionType.ONE_TO_ONE ? 1 : maxParticipants,
         isPrivate: sessionType === SessionType.ONE_TO_ONE ? true : isPrivate,
-        announcedImmediately: sessionType !== SessionType.ONE_TO_ONE && !isPrivate ? announceToEveryone : false,
+        announcedImmediately: shouldAnnounce,
       });
 
       const privateMsg = session.joinCode
@@ -375,7 +434,7 @@ export const CreateSessionScreen = ({ navigation }: any) => {
                 <Text style={styles.inputLabel}>Student to Mentor (Name or @username)</Text>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="e.g. Chiranjib Das (@chira)"
+                  placeholder="Enter student name or @username"
                   placeholderTextColor="#9CA3AF"
                   value={targetLearnerName}
                   onChangeText={setTargetLearnerName}
@@ -383,18 +442,53 @@ export const CreateSessionScreen = ({ navigation }: any) => {
               </View>
             )}
 
-            {/* Conditional input for Multi-host */}
+            {/* Conditional input for Multi-host (Allows 1 or more co-hosts) */}
             {sessionType === SessionType.MULTI_MENTOR && (
               <View style={[styles.inputCard, { marginTop: 14 }]}>
-                <Text style={styles.inputLabel}>Co-Host Username</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="e.g. priya_sharma"
-                  placeholderTextColor="#9CA3AF"
-                  value={coHostUsername}
-                  onChangeText={setCoHostUsername}
-                  autoCapitalize="none"
-                />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <Text style={styles.inputLabel}>Co-Host Mentors</Text>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#0E6245' }}>
+                    {coHostUsernames.length} added
+                  </Text>
+                </View>
+
+                {/* Co-host chips */}
+                {coHostUsernames.length > 0 && (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                    {coHostUsernames.map((uname) => (
+                      <View key={uname} style={styles.coHostChip}>
+                        <Text style={styles.coHostChipText}>@{uname}</Text>
+                        <TouchableOpacity onPress={() => handleRemoveCoHost(uname)} style={{ marginLeft: 6 }}>
+                          <X size={13} color="#FFFFFF" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {/* Co-host input row */}
+                <View style={styles.coHostInputRow}>
+                  <TextInput
+                    style={styles.coHostInput}
+                    placeholder="Enter co-host @username and tap Add"
+                    placeholderTextColor="#9CA3AF"
+                    value={newCoHostInput}
+                    onChangeText={setNewCoHostInput}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    onSubmitEditing={() => handleAddCoHost()}
+                  />
+                  <TouchableOpacity
+                    style={[styles.coHostAddBtn, !newCoHostInput.trim() && { opacity: 0.5 }]}
+                    onPress={() => handleAddCoHost()}
+                    disabled={!newCoHostInput.trim()}
+                  >
+                    <Plus size={16} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+                <Text style={{ fontSize: 11, color: '#5A6561', marginTop: 6 }}>
+                  You can invite multiple co-hosts. They will each receive a collaborative hosting request.
+                </Text>
               </View>
             )}
           </View>
@@ -763,40 +857,64 @@ export const CreateSessionScreen = ({ navigation }: any) => {
               })}
             </View>
 
-            {/* Meeting link input */}
-            <View style={[styles.inputCard, { marginTop: 14 }]}>
-              <Text style={styles.inputLabel}>Meeting link</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="https://meet.google.com/..."
-                placeholderTextColor="#9CA3AF"
-                value={meetingLink}
-                onChangeText={setMeetingLink}
-              />
-            </View>
-
-            {/* Announcement Toggle Card */}
-            <View style={styles.announceCard}>
-              <Megaphone size={20} color="#111827" style={{ marginRight: 12 }} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.announceTitle}>
-                  Announce to everyone <Text style={{ color: '#0E6245' }}>(free)</Text>
-                </Text>
-                <Text style={styles.announceSub}>
-                  3 free announcements left in your allowance.
-                </Text>
+            {/* Online / Hybrid: Meeting link input */}
+            {(locationMode === LocationMode.ONLINE || locationMode === LocationMode.HYBRID) && (
+              <View style={[styles.inputCard, { marginTop: 14 }]}>
+                <Text style={styles.inputLabel}>Meeting link</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="https://meet.google.com/..."
+                  placeholderTextColor="#9CA3AF"
+                  value={meetingLink}
+                  onChangeText={setMeetingLink}
+                  autoCapitalize="none"
+                />
               </View>
+            )}
 
-              <TouchableOpacity
-                style={[
-                  styles.checkCircleToggle,
-                  announceToEveryone ? styles.checkCircleActive : styles.checkCircleInactive,
-                ]}
-                onPress={() => setAnnounceToEveryone(!announceToEveryone)}
-              >
-                {announceToEveryone && <Check size={14} color="#FFFFFF" />}
-              </TouchableOpacity>
-            </View>
+            {/* Offline / Hybrid: Campus Location input */}
+            {(locationMode === LocationMode.OFFLINE || locationMode === LocationMode.HYBRID) && (
+              <View style={[styles.inputCard, { marginTop: 14 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                  <MapPin size={14} color="#0E6245" style={{ marginRight: 5 }} />
+                  <Text style={styles.inputLabel}>
+                    {locationMode === LocationMode.HYBRID ? 'Campus In-Person Venue / Room (Hybrid)' : 'Campus Location / Room Address'}
+                  </Text>
+                </View>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="e.g. Block B, CSE Lab 4 / Library Study Pod 2"
+                  placeholderTextColor="#9CA3AF"
+                  value={locationAddress}
+                  onChangeText={setLocationAddress}
+                />
+              </View>
+            )}
+
+            {/* Announcement Toggle Card - Only for public group or multi-host sessions */}
+            {sessionType !== SessionType.ONE_TO_ONE && !isPrivate && (
+              <View style={styles.announceCard}>
+                <Megaphone size={20} color="#111827" style={{ marginRight: 12 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.announceTitle}>
+                    Announce to everyone <Text style={{ color: '#0E6245' }}>(free)</Text>
+                  </Text>
+                  <Text style={styles.announceSub}>
+                    3 free announcements left in your allowance.
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.checkCircleToggle,
+                    announceToEveryone ? styles.checkCircleActive : styles.checkCircleInactive,
+                  ]}
+                  onPress={() => setAnnounceToEveryone(!announceToEveryone)}
+                >
+                  {announceToEveryone && <Check size={14} color="#FFFFFF" />}
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Credit Economy Preview Card (Artboard Page 6) */}
             <View style={styles.economyPreviewCard}>
@@ -1030,6 +1148,45 @@ const styles = StyleSheet.create({
   formatCardDesc: {
     fontSize: 12,
     color: '#5A6561',
+  },
+  // Co-Host Multi-Chip styles
+  coHostChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0E6245',
+    borderRadius: 14,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  coHostChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  coHostInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAF9',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+    paddingLeft: 12,
+    paddingRight: 5,
+    height: 42,
+    marginTop: 4,
+  },
+  coHostInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#111827',
+  },
+  coHostAddBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#0E6245',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   // Step 2 Styles (Skills & Calendar)
   skillsHeaderRow: {
