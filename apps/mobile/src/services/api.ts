@@ -14,19 +14,18 @@ import {
 } from '@skill-exchange/shared-types';
 import Constants from 'expo-constants';
 
-// Determine primary API host from Expo debugger URL (e.g. 192.168.0.108) or fallback
-const expoHost =
-  Constants.expoConfig?.hostUri?.split(':')[0] ||
-  (Constants as any).manifest2?.extra?.expoClient?.hostUri?.split(':')[0] ||
-  (Constants as any).manifest?.debuggerHost?.split(':')[0] ||
-  '192.168.0.108';
+function getCandidateHosts(): string[] {
+  const dynamicExpoHost =
+    Constants.expoConfig?.hostUri?.split(':')[0] ||
+    (Constants as any).manifest2?.extra?.expoClient?.hostUri?.split(':')[0] ||
+    (Constants as any).manifest?.debuggerHost?.split(':')[0];
 
-// Build candidate base URLs:
-// 1. localhost:4000 (works instantly via 'adb reverse tcp:4000 tcp:4000' over USB)
-// 2. expoHost:4000 (works over Wi-Fi / LAN)
-const candidateHosts = Platform.OS === 'android'
-  ? Array.from(new Set(['localhost', '192.168.0.108', expoHost, '10.0.2.2'])).filter(Boolean)
-  : Array.from(new Set(['localhost', '192.168.0.108', expoHost])).filter(Boolean);
+  const hosts = Platform.OS === 'android'
+    ? [dynamicExpoHost, 'localhost', '192.168.0.107', '192.168.0.108', '10.0.2.2']
+    : [dynamicExpoHost, 'localhost', '192.168.0.107', '192.168.0.108'];
+
+  return Array.from(new Set(hosts.filter(Boolean) as string[]));
+}
 
 let cachedWorkingHost: string | null = null;
 
@@ -41,10 +40,10 @@ async function request(endpoint: string, options: RequestInit = {}) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  // If we already found a host that works, prioritize it
+  const candidates = getCandidateHosts();
   const hostsToTry = cachedWorkingHost
-    ? [cachedWorkingHost, ...candidateHosts.filter((h) => h !== cachedWorkingHost)]
-    : candidateHosts;
+    ? [cachedWorkingHost, ...candidates.filter((h) => h !== cachedWorkingHost)]
+    : candidates;
 
   let lastError: any = null;
 
@@ -113,6 +112,10 @@ export const api = {
     request(`/sessions/${id}/cancel`, { method: 'POST' }),
   startSessionEarly: (id: string) =>
     request(`/sessions/${id}/start-early`, { method: 'POST' }),
+  stopSessionEarly: (id: string, attendance?: { userId: string; attended: boolean }[]) =>
+    request(`/sessions/${id}/stop-early`, { method: 'POST', body: JSON.stringify({ attendance }) }),
+  concludeSession: (id: string, attendance: { userId: string; attended: boolean }[]) =>
+    request(`/sessions/${id}/conclude`, { method: 'POST', body: JSON.stringify({ attendance }) }),
   respondToMentorRequest: (id: string, accept: boolean) =>
     request(`/sessions/${id}/mentor-response`, { method: 'POST', body: JSON.stringify({ accept }) }),
   announceSession: (id: string) => request(`/sessions/${id}/announce`, { method: 'POST' }),
@@ -151,4 +154,6 @@ export const api = {
   getBadges: () => request('/badges/me'),
   getAnalytics: () => request('/analytics/skill-demand'),
   generateBanner: (sourceType: string, sourceId?: string) => request('/banners/generate', { method: 'POST', body: JSON.stringify({ sourceType, sourceId }) }),
+  exportBannerPng: (data: any) => request('/export/banner-png', { method: 'POST', body: JSON.stringify(data) }),
+  exportResumePng: (data: any) => request('/export/resume-png', { method: 'POST', body: JSON.stringify(data) }),
 };

@@ -1,4 +1,5 @@
 import React from 'react';
+import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -26,24 +27,59 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
+function TabBarIconWithIndicator({
+  icon: IconComponent,
+  focused,
+  color,
+}: {
+  icon: any;
+  focused: boolean;
+  color: string;
+}) {
+  return (
+    <View
+      style={{
+        width: 64,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: focused ? '#D8F3E5' : 'transparent',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 2,
+      }}
+    >
+      <IconComponent color={focused ? '#0E6245' : '#6B7280'} size={20} strokeWidth={focused ? 2.3 : 1.8} />
+    </View>
+  );
+}
+
 function MainTabNavigator() {
   const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
-      sceneContainerStyle={{ paddingTop: insets.top }}
+      sceneContainerStyle={{ paddingTop: insets.top, backgroundColor: '#F8FAF9' }}
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#0F172A',
-          borderTopColor: '#1E293B',
-          borderTopWidth: 1.5,
-          height: 60 + insets.bottom,
-          paddingBottom: 8 + insets.bottom,
+          backgroundColor: '#FFFFFF',
+          borderTopColor: '#E8EFEA',
+          borderTopWidth: 1,
+          height: 62 + insets.bottom,
+          paddingBottom: Math.max(8, insets.bottom),
           paddingTop: 6,
+          elevation: 8,
+          shadowColor: '#000000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.04,
+          shadowRadius: 6,
         },
-        tabBarActiveTintColor: '#38BDF8',
-        tabBarInactiveTintColor: '#64748B',
+        tabBarActiveTintColor: '#0E6245',
+        tabBarInactiveTintColor: '#6B7280',
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+        },
       }}
     >
       <Tab.Screen
@@ -51,23 +87,29 @@ function MainTabNavigator() {
         component={DiscoverScreen}
         options={{
           tabBarLabel: 'Discover',
-          tabBarIcon: ({ color, size }) => <Compass color={color} size={22} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIconWithIndicator icon={Compass} focused={focused} color={color} />
+          ),
         }}
       />
       <Tab.Screen
         name="SessionsTab"
         component={SessionsListScreen}
         options={{
-          tabBarLabel: 'My Sessions',
-          tabBarIcon: ({ color, size }) => <Users color={color} size={22} />,
+          tabBarLabel: 'My sessions',
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIconWithIndicator icon={Users} focused={focused} color={color} />
+          ),
         }}
       />
       <Tab.Screen
         name="MarketTab"
         component={MarketplaceScreen}
         options={{
-          tabBarLabel: 'Market & Blogs',
-          tabBarIcon: ({ color, size }) => <ShoppingBag color={color} size={22} />,
+          tabBarLabel: 'Market',
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIconWithIndicator icon={ShoppingBag} focused={focused} color={color} />
+          ),
         }}
       />
       <Tab.Screen
@@ -75,7 +117,9 @@ function MainTabNavigator() {
         component={ProfileScreen}
         options={{
           tabBarLabel: 'Profile',
-          tabBarIcon: ({ color, size }) => <User color={color} size={22} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIconWithIndicator icon={User} focused={focused} color={color} />
+          ),
         }}
       />
     </Tab.Navigator>
@@ -84,15 +128,25 @@ function MainTabNavigator() {
 
 export function RootNavigator() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isHydrated = useAuthStore((s) => s.isHydrated);
+
+  if (!isHydrated) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#F8FAF9', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#0E6245" />
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer>
       <Stack.Navigator
         screenOptions={{
-          headerStyle: { backgroundColor: '#0B0F19' },
-          headerTintColor: '#F8FAFC',
-          headerTitleStyle: { fontWeight: '700' },
-          contentStyle: { backgroundColor: '#0B0F19' },
+          headerStyle: { backgroundColor: '#F8FAF9' },
+          headerTintColor: '#111827',
+          headerTitleStyle: { fontWeight: '700', fontSize: 18 },
+          headerShadowVisible: false,
+          contentStyle: { backgroundColor: '#F8FAF9' },
         }}
       >
         {isAuthenticated ? (
@@ -105,12 +159,12 @@ export function RootNavigator() {
             <Stack.Screen
               name="CreateSession"
               component={CreateSessionScreen}
-              options={{ title: 'Host Session' }}
+              options={{ headerShown: false }}
             />
             <Stack.Screen
               name="SessionDetail"
               component={SessionDetailScreen}
-              options={{ title: 'Session Details' }}
+              options={{ headerShown: false }}
             />
             <Stack.Screen
               name="Showcase"

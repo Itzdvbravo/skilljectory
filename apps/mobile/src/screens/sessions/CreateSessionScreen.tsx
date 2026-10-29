@@ -14,11 +14,6 @@ import {
   LocationMode,
   SessionDurationHours,
 } from '@skill-exchange/shared-types';
-import { LocationPicker } from '../../components/session/LocationPicker';
-import { CalendarDateTimePicker } from '../../components/session/CalendarDateTimePicker';
-import { SkillsTagSelector } from '../../components/session/SkillsTagSelector';
-import { MentorUsernameSelector, MentorUser } from '../../components/session/MentorUsernameSelector';
-import { AvatarWithBadgeFrame, useAppTheme } from '../../components/common/ThemeSystem';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import {
@@ -26,147 +21,122 @@ import {
   User,
   Flame,
   Info,
-  CheckCircle,
-  Radio,
+  Clock,
+  Calendar,
+  Globe,
+  MapPin,
+  Lock,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  X,
   Megaphone,
-  Sparkles,
+  Check,
+  ShieldCheck,
+  Minus,
 } from 'lucide-react-native';
+import { BrandUnderline } from '../../components/common/ThemeSystem';
 
 const DURATIONS: SessionDurationHours[] = [1, 1.5, 2, 2.5, 3];
-const MAX_TITLE_LENGTH = 80;
-const MAX_DESC_LENGTH = 500;
+const SUGGESTED_SKILLS = [
+  'Architecture',
+  'Cloud / AWS',
+  'Data Structures',
+  'Guitar & Music Theory',
+  'Machine Learning',
+  'Macroeconomics',
+];
+const POPULAR_SLOTS = ['09:00 AM', '11:00 AM', '02:00 PM', '04:30 PM'];
 
 export const CreateSessionScreen = ({ navigation }: any) => {
-  const theme = useAppTheme();
   const currentUser = useAuthStore((s) => s.user);
+
+  // Wizard Step: 1, 2, 3, 4
+  const [currentStep, setCurrentStep] = useState<number>(1);
 
   // Form states
   const [sessionType, setSessionType] = useState<SessionType>(SessionType.GROUP);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [skillsTags, setSkillsTags] = useState<string[]>(['React Native', 'Mobile Engineering']);
-  const [targetLearnerName, setTargetLearnerName] = useState('');
-  const [coMentors, setCoMentors] = useState<MentorUser[]>([]);
+  const [newSkillInput, setNewSkillInput] = useState('');
+  const [targetLearnerName, setTargetLearnerName] = useState('Chiranjib Das');
+  const [coHostUsername, setCoHostUsername] = useState('');
 
-  const [scheduledDate, setScheduledDate] = useState<Date>(() => {
+  // Date and Time selection
+  const [calendarDate, setCalendarDate] = useState<Date>(() => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
-    d.setHours(16, 0, 0, 0);
     return d;
   });
+  const [selectedHour, setSelectedHour] = useState<number>(4);
+  const [selectedMinute, setSelectedMinute] = useState<string>(':00');
+  const [selectedPeriod, setSelectedPeriod] = useState<'AM' | 'PM'>('PM');
 
-  const [durationHours, setDurationHours] = useState<SessionDurationHours>(1.5);
-  const [locationMode, setLocationMode] = useState<LocationMode>(LocationMode.ONLINE);
-  const [meetingLink, setMeetingLink] = useState('https://meet.google.com/abc-demo-room');
-  const [locationAddress, setLocationAddress] = useState('');
+  // Step 3 settings
   const [maxParticipants, setMaxParticipants] = useState<number>(10);
   const [isPrivate, setIsPrivate] = useState<boolean>(false);
 
-  // Announcement state
+  // Step 4 settings
+  const [durationHours, setDurationHours] = useState<SessionDurationHours>(1.5);
+  const [locationMode, setLocationMode] = useState<LocationMode>(LocationMode.ONLINE);
+  const [meetingLink, setMeetingLink] = useState('https://meet.google.com/abc-demo-room');
   const [announceToEveryone, setAnnounceToEveryone] = useState<boolean>(true);
-  const [freeAnnouncementsUsed, setFreeAnnouncementsUsed] = useState<number>(currentUser ? 0 : 0);
-  const [announcementWindowStart, setAnnouncementWindowStart] = useState<string | null>(null);
 
-  // Live Economy Preview state
-  const [previewData, setPreviewData] = useState<any | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
+  // Submit / Preview state
   const [submitLoading, setSubmitLoading] = useState(false);
 
-  // Fetch user announcement state on mount
-  useEffect(() => {
-    fetchUserInfo();
-  }, []);
+  // Compute final scheduled date
+  const computeFinalDate = () => {
+    const d = new Date(calendarDate);
+    let h = selectedHour;
+    if (selectedPeriod === 'PM' && h < 12) h += 12;
+    if (selectedPeriod === 'AM' && h === 12) h = 0;
+    const m = parseInt(selectedMinute.replace(':', ''), 10) || 0;
+    d.setHours(h, m, 0, 0);
+    return d;
+  };
 
-  const fetchUserInfo = async () => {
-    try {
-      const me = await api.getMe();
-      if (me) {
-        setFreeAnnouncementsUsed(me.freeAnnouncementsUsed ?? 0);
+  const handleAddSkill = (skill: string) => {
+    const trimmed = skill.trim();
+    if (!trimmed || skillsTags.includes(trimmed)) return;
+    if (skillsTags.length >= 6) {
+      Alert.alert('Tag Limit', 'You can select up to 6 skills to teach.');
+      return;
+    }
+    setSkillsTags([...skillsTags, trimmed]);
+    setNewSkillInput('');
+  };
+
+  const handleRemoveSkill = (skill: string) => {
+    setSkillsTags(skillsTags.filter((s) => s !== skill));
+  };
+
+  const handleNext = () => {
+    if (currentStep === 1) {
+      if (!title.trim()) {
+        Alert.alert('Event Title Required', 'Please enter a title for your session.');
+        return;
       }
-    } catch {
-      // Ignored
+      if (sessionType === SessionType.ONE_TO_ONE && !targetLearnerName.trim()) {
+        Alert.alert('Target Student Required', 'Please specify the student you want to mentor.');
+        return;
+      }
+      setCurrentStep(2);
+    } else if (currentStep === 2) {
+      if (skillsTags.length === 0) {
+        Alert.alert('Skills Required', 'Please select or add at least 1 skill to teach.');
+        return;
+      }
+      setCurrentStep(3);
+    } else if (currentStep === 3) {
+      setCurrentStep(4);
     }
   };
 
-  // Compute announcement eligibility
-  const freebiesRemaining = Math.max(0, 4 - freeAnnouncementsUsed);
-  const isAnnouncementFree = freebiesRemaining > 0;
-
-  // Auto adjust max participants on type change
-  useEffect(() => {
-    if (sessionType === SessionType.GROUP) {
-      if (maxParticipants < 2) setMaxParticipants(2);
-      if (maxParticipants > 15) setMaxParticipants(15);
-    } else if (sessionType === SessionType.MULTI_MENTOR) {
-      const totalHosts = 1 + coMentors.length;
-      if (maxParticipants < totalHosts) setMaxParticipants(totalHosts);
-      if (maxParticipants > 15) setMaxParticipants(15);
-    } else {
-      setMaxParticipants(1);
-    }
-  }, [sessionType, coMentors.length]);
-
-  // Fetch preview on changes
-  useEffect(() => {
-    fetchPreview();
-  }, [sessionType, durationHours, maxParticipants, coMentors.length]);
-
-  const fetchPreview = async () => {
-    try {
-      setPreviewLoading(true);
-      const totalMentors = sessionType === SessionType.MULTI_MENTOR ? 1 + coMentors.length : 1;
-      const data = await api.previewSession({
-        sessionType,
-        durationHours,
-        expectedLearners: maxParticipants,
-        mentorsCount: totalMentors,
-      });
-      setPreviewData(data);
-    } catch {
-      const hostCost =
-        sessionType === SessionType.GROUP ? 1 : sessionType === SessionType.MULTI_MENTOR ? 1.5 : 0;
-      const projected =
-        sessionType === SessionType.GROUP
-          ? Math.max(3, maxParticipants * durationHours)
-          : maxParticipants * durationHours;
-      setPreviewData({
-        hostCost,
-        learnerCostPerPerson: durationHours,
-        projectedEarnings: projected,
-        netHostResult: projected - hostCost,
-        minParticipants: sessionType === SessionType.GROUP ? 2 : 1 + coMentors.length,
-        canAfford: true,
-        notes: ['Verified against campus time-credit rules.'],
-      });
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
-
-  const handleCreate = async () => {
-    if (!title.trim()) {
-      Alert.alert('Missing Title', 'Please enter a custom title for your session.');
-      return;
-    }
-    if (skillsTags.length === 0) {
-      Alert.alert('Missing Skills', 'Please add at least 1 skill tag to teach.');
-      return;
-    }
-
-    if (sessionType === SessionType.MULTI_MENTOR && coMentors.length === 0) {
-      Alert.alert(
-        'Co-Hosts Required',
-        'Multi-host sessions require at least 1 co-host mentor from the campus dataset.'
-      );
-      return;
-    }
-
-    if (sessionType === SessionType.ONE_TO_ONE && !targetLearnerName.trim()) {
-      Alert.alert('Learner Name Required', 'Please enter the name of the student for this 1-on-1 session.');
-      return;
-    }
-
-    if (scheduledDate.getTime() <= Date.now()) {
+  const handleConfirmAndHost = async () => {
+    const finalDate = computeFinalDate();
+    if (finalDate.getTime() <= Date.now()) {
       Alert.alert('Invalid Time', 'Scheduled time must be in the future.');
       return;
     }
@@ -176,501 +146,843 @@ export const CreateSessionScreen = ({ navigation }: any) => {
 
       const session = await api.createSession({
         sessionType,
-        skillId: 'skl_react_native', // default primary skill id
+        skillId: 'skl_react_native',
         title: title.trim(),
         description: description.trim(),
         skillsTags,
         targetLearnerName: sessionType === SessionType.ONE_TO_ONE ? targetLearnerName.trim() : undefined,
         durationHours,
-        scheduledAt: scheduledDate.toISOString(),
+        scheduledAt: finalDate.toISOString(),
         locationMode,
         meetingLink: locationMode !== LocationMode.OFFLINE ? meetingLink : undefined,
-        locationAddress: locationMode !== LocationMode.ONLINE ? locationAddress : undefined,
         coMentorUsernames:
-          sessionType === SessionType.MULTI_MENTOR ? coMentors.map((m) => m.username) : undefined,
-        maxParticipants: sessionType !== SessionType.ONE_TO_ONE ? maxParticipants : 1,
+          sessionType === SessionType.MULTI_MENTOR && coHostUsername.trim()
+            ? [coHostUsername.trim()]
+            : undefined,
+        maxParticipants: sessionType === SessionType.ONE_TO_ONE ? 1 : maxParticipants,
         isPrivate: sessionType === SessionType.ONE_TO_ONE ? true : isPrivate,
-        announcedImmediately: (sessionType !== SessionType.ONE_TO_ONE && !isPrivate) ? announceToEveryone : false,
+        announcedImmediately: sessionType !== SessionType.ONE_TO_ONE && !isPrivate ? announceToEveryone : false,
       });
 
       const privateMsg = session.joinCode
-        ? `\n\n🔒 Private Joining Code: ${session.joinCode}\nShare this code with invited attendees so they can join!`
+        ? `\n\n🔒 Private Code: ${session.joinCode}\nShare this with invited learners.`
         : '';
 
-      const coHostMsg =
-        sessionType === SessionType.MULTI_MENTOR
-          ? `\n\n📨 Requests sent to ${coMentors.length} co-host(s). They can accept in their 'My Sessions' tab.`
-          : '';
-
-      const oneToOneMsg =
-        sessionType === SessionType.ONE_TO_ONE
-          ? `\n\n📨 Mentorship request sent to ${targetLearnerName.trim()}! They can find it in their 'My Sessions' tab.`
-          : '';
-
       Alert.alert(
-        'Session Hosted Successfully! 🎓',
-        `"${title.trim()}" is scheduled for ${scheduledDate.toLocaleDateString([], {
+        'Session Hosted! 🎓',
+        `"${title.trim()}" is scheduled for ${finalDate.toLocaleDateString([], {
           weekday: 'short',
           month: 'short',
           day: 'numeric',
-        })} at ${scheduledDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.${privateMsg}${coHostMsg}${oneToOneMsg}`,
-        [{ text: 'View Sessions', onPress: () => navigation.goBack() }]
+        })} at ${finalDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.${privateMsg}`,
+        [{ text: 'Done', onPress: () => navigation.goBack() }]
       );
     } catch (err: any) {
-      Alert.alert('Session Creation Notice', err.message || 'Please check all required fields.');
+      Alert.alert('Error', err.message || 'Failed to create session. Please try again.');
     } finally {
       setSubmitLoading(false);
     }
   };
 
-  const minCapacity = sessionType === SessionType.MULTI_MENTOR ? 1 + coMentors.length : 2;
+  // Helper calendar calculations
+  const year = calendarDate.getFullYear();
+  const month = calendarDate.getMonth();
+  const monthName = calendarDate.toLocaleString('default', { month: 'long' });
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDayIndex = (new Date(year, month, 1).getDay() + 6) % 7; // Monday = 0
+
+  const calendarDays = [];
+  // Days of previous month placeholder
+  for (let i = 0; i < firstDayIndex; i++) {
+    calendarDays.push({ day: 0, isCurrentMonth: false });
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    calendarDays.push({ day: d, isCurrentMonth: true });
+  }
+
+  const handleSelectPopularSlot = (slotStr: string) => {
+    // "04:30 PM"
+    const parts = slotStr.split(' ');
+    const timeParts = parts[0].split(':');
+    const h = parseInt(timeParts[0], 10);
+    const m = `:${timeParts[1]}`;
+    const p = parts[1] as 'AM' | 'PM';
+    setSelectedHour(h);
+    setSelectedMinute(m);
+    setSelectedPeriod(p);
+  };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Host Profile Identification Banner */}
-      <View style={styles.hostIdentifierBanner}>
-        <AvatarWithBadgeFrame
-          name={currentUser?.name || 'Alex Rivera'}
-          username={currentUser?.username || 'alexrivera'}
-          size={44}
-          style={{ marginRight: 10 }}
-        />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.hostIdentifierLabel}>HOSTING AS</Text>
-          <Text style={styles.hostRealName}>
-            {currentUser?.name || 'Alex Rivera'}{' '}
-            <Text style={styles.hostUsername}>
-              (@{currentUser?.username || 'alexrivera'})
-            </Text>
-          </Text>
-        </View>
-        <View style={styles.verifiedHostTag}>
-          <Text style={styles.verifiedHostText}>Verified Host</Text>
-        </View>
-      </View>
-
-      <Text style={styles.screenHeader}>Host a Campus Session</Text>
-      <Text style={styles.screenSub}>
-        Teach fellow students, build your verified showcase portfolio, and earn time-credits.
-      </Text>
-
-      {/* 1. Custom Title & Description */}
-      <Text style={styles.sectionLabel}>SESSION TITLE & OVERVIEW</Text>
-      <View style={styles.inputCard}>
-        <View style={styles.inputHeaderRow}>
-          <Text style={styles.inputFieldTitle}>Event Title *</Text>
-          <Text
-            style={[
-              styles.charCounter,
-              title.length > MAX_TITLE_LENGTH && styles.charCounterLimit,
-            ]}
-          >
-            {title.length}/{MAX_TITLE_LENGTH}
-          </Text>
-        </View>
-        <TextInput
-          style={styles.textInput}
-          placeholder="e.g. Master React Native Reanimated & Gesture Handler"
-          placeholderTextColor="#64748B"
-          value={title}
-          onChangeText={setTitle}
-          maxLength={MAX_TITLE_LENGTH}
-        />
-
-        <View style={[styles.inputHeaderRow, { marginTop: 14 }]}>
-          <Text style={styles.inputFieldTitle}>Event Description</Text>
-          <Text
-            style={[
-              styles.charCounter,
-              description.length > MAX_DESC_LENGTH && styles.charCounterLimit,
-            ]}
-          >
-            {description.length}/{MAX_DESC_LENGTH}
-          </Text>
-        </View>
-        <TextInput
-          style={[styles.textInput, styles.textArea]}
-          placeholder="Describe what students will learn, prerequisites, and workshop objectives..."
-          placeholderTextColor="#64748B"
-          value={description}
-          onChangeText={setDescription}
-          multiline
-          numberOfLines={4}
-          maxLength={MAX_DESC_LENGTH}
-        />
-      </View>
-
-      {/* 2. Choose Format */}
-      <Text style={styles.sectionLabel}>CHOOSE SESSION FORMAT</Text>
-      <View style={styles.typeSelector}>
+    <View style={styles.container}>
+      {/* Top Header Row (Artboard Pages 3-6) */}
+      <View style={styles.headerRow}>
         <TouchableOpacity
-          style={[styles.typeCard, sessionType === SessionType.GROUP && styles.typeCardActive]}
-          onPress={() => setSessionType(SessionType.GROUP)}
+          onPress={() => (currentStep > 1 ? setCurrentStep(currentStep - 1) : navigation.goBack())}
+          style={styles.backBtn}
         >
-          <Users size={22} color={sessionType === SessionType.GROUP ? '#38BDF8' : '#64748B'} />
-          <Text style={[styles.typeTitle, sessionType === SessionType.GROUP && styles.typeTitleActive]}>
-            Group Workshop
-          </Text>
-          <Text style={styles.typeDesc}>Single host • Min 2, max 15 students • 1 cr anti-spam</Text>
+          <ChevronLeft size={24} color="#111827" />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.typeCard, sessionType === SessionType.MULTI_MENTOR && styles.typeCardActive]}
-          onPress={() => setSessionType(SessionType.MULTI_MENTOR)}
-        >
-          <Flame size={22} color={sessionType === SessionType.MULTI_MENTOR ? '#A855F7' : '#64748B'} />
-          <Text
-            style={[
-              styles.typeTitle,
-              sessionType === SessionType.MULTI_MENTOR && styles.typeTitleActive,
-            ]}
-          >
-            Multi-Host Collaborative
-          </Text>
-          <Text style={styles.typeDesc}>
-            Team mentoring • Co-hosts receive invite requests • 1.5 cr/mentor
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.typeCard, sessionType === SessionType.ONE_TO_ONE && styles.typeCardActive]}
-          onPress={() => setSessionType(SessionType.ONE_TO_ONE)}
-        >
-          <User size={22} color={sessionType === SessionType.ONE_TO_ONE ? '#10B981' : '#64748B'} />
-          <Text
-            style={[
-              styles.typeTitle,
-              sessionType === SessionType.ONE_TO_ONE && styles.typeTitleActive,
-            ]}
-          >
-            1-on-1 Direct Mentoring
-          </Text>
-          <Text style={styles.typeDesc}>Personal session with a specific student • 1 cr/hr</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* 3. Conditional: Learner Name for 1-on-1 Session */}
-      {sessionType === SessionType.ONE_TO_ONE && (
-        <>
-          <Text style={styles.sectionLabel}>LEARNER NAME</Text>
-          <View style={styles.inputCard}>
-            <Text style={styles.inputCardTitle}>Who are you mentoring?</Text>
-            <Text style={styles.inputCardSub}>
-              Enter the student's real name or @username for this 1-on-1 session.
-            </Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="e.g. Maya Lin (@mayal) or student name"
-              placeholderTextColor="#64748B"
-              value={targetLearnerName}
-              onChangeText={setTargetLearnerName}
-            />
+        <View style={styles.headerTitleWrap}>
+          <Text style={styles.headerTitle}>Host </Text>
+          <View style={{ alignItems: 'center' }}>
+            <Text style={styles.headerTitle}>session</Text>
+            <BrandUnderline width={68} style={{ marginTop: 2 }} />
           </View>
-        </>
-      )}
-
-      {/* 4. Conditional: Multi-Mentor Co-Host Usernames */}
-      {sessionType === SessionType.MULTI_MENTOR && (
-        <MentorUsernameSelector
-          selectedMentors={coMentors}
-          onMentorsChange={setCoMentors}
-          maxCoMentors={3}
-        />
-      )}
-
-      {/* 5. Skills To Teach (Tag-based Selector up to 6 max) */}
-      <SkillsTagSelector
-        selectedTags={skillsTags}
-        onChangeTags={setSkillsTags}
-        maxTags={6}
-      />
-
-      {/* 6. Calendar-like Date & Time Picker */}
-      <Text style={styles.sectionLabel}>WHEN WILL THE SESSION TAKE PLACE?</Text>
-      <CalendarDateTimePicker
-        selectedDate={scheduledDate}
-        onDateChange={setScheduledDate}
-      />
-
-      {/* 7. Capacity & Privacy (for Group and Multi-Host) */}
-      {sessionType !== SessionType.ONE_TO_ONE && (
-        <>
-          <Text style={styles.sectionLabel}>MAX NUMBER OF STUDENTS ALLOWED</Text>
-          <View style={styles.inputCard}>
-            <View style={styles.stepperContainer}>
-              <View>
-                <Text style={styles.capacityHeader}>
-                  Student Limit: <Text style={styles.capacityHighlight}>{maxParticipants}</Text> students
-                </Text>
-                <Text style={styles.capacitySub}>
-                  Min {minCapacity} students • Max 15 students
-                </Text>
-              </View>
-
-              <View style={styles.stepperButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.stepperBtn,
-                    maxParticipants <= minCapacity && styles.stepperBtnDisabled,
-                  ]}
-                  onPress={() => setMaxParticipants((prev) => Math.max(minCapacity, prev - 1))}
-                  disabled={maxParticipants <= minCapacity}
-                >
-                  <Text style={styles.stepperBtnText}>-</Text>
-                </TouchableOpacity>
-
-                <Text style={styles.stepperValueText}>{maxParticipants}</Text>
-
-                <TouchableOpacity
-                  style={[
-                    styles.stepperBtn,
-                    maxParticipants >= 15 && styles.stepperBtnDisabled,
-                  ]}
-                  onPress={() => setMaxParticipants((prev) => Math.min(15, prev + 1))}
-                  disabled={maxParticipants >= 15}
-                >
-                  <Text style={styles.stepperBtnText}>+</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-
-          {/* Privacy */}
-          <Text style={styles.sectionLabel}>SESSION ACCESS & PRIVACY</Text>
-          <View style={styles.accessContainer}>
-            <TouchableOpacity
-              style={[styles.accessCard, !isPrivate && styles.accessCardActive]}
-              onPress={() => setIsPrivate(false)}
-            >
-              <Text style={[styles.accessTitle, !isPrivate && styles.accessTitleActive]}>
-                🌐 Public Event
-              </Text>
-              <Text style={styles.accessDesc}>Open to any campus student via Discover</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.accessCard, isPrivate && styles.accessCardActive]}
-              onPress={() => setIsPrivate(true)}
-            >
-              <Text style={[styles.accessTitle, isPrivate && styles.accessTitleActive]}>
-                🔒 Private Event
-              </Text>
-              <Text style={styles.accessDesc}>Requires a secret joining code to enter</Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
-
-      {/* 8. Duration Selector */}
-      <Text style={styles.sectionLabel}>DURATION (HOURS)</Text>
-      <View style={styles.durationRow}>
-        {DURATIONS.map((d) => (
-          <TouchableOpacity
-            key={d}
-            style={[styles.durationChip, durationHours === d && styles.durationChipActive]}
-            onPress={() => setDurationHours(d)}
-          >
-            <Text style={[styles.durationText, durationHours === d && styles.durationTextActive]}>
-              {d} hr{d > 1 ? 's' : ''}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* 9. Location Mode Picker */}
-      <LocationPicker
-        mode={locationMode}
-        onModeChange={setLocationMode}
-        meetingLink={meetingLink}
-        onMeetingLinkChange={setMeetingLink}
-        locationAddress={locationAddress}
-        onLocationAddressChange={setLocationAddress}
-      />
-
-      {/* 10. "Announce to Everyone" Option (Only for Public Group / Multi-Mentor Sessions) */}
-      {sessionType !== SessionType.ONE_TO_ONE && !isPrivate && (
-        <>
-          <Text style={styles.sectionLabel}>CAMPUS BULLETIN ANNOUNCEMENT</Text>
-          <TouchableOpacity
-            style={[
-              styles.announceCard,
-              announceToEveryone && styles.announceCardActive,
-            ]}
-            onPress={() => setAnnounceToEveryone(!announceToEveryone)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.announceTopRow}>
-              <View style={styles.announceTitleRow}>
-                <Megaphone
-                  size={18}
-                  color={announceToEveryone ? '#38BDF8' : '#64748B'}
-                  style={{ marginRight: 8 }}
-                />
-                <Text style={styles.announceTitle}>
-                  Announce to everyone{' '}
-                  <Text style={isAnnouncementFree ? styles.freePill : styles.paidPill}>
-                    {isAnnouncementFree ? '(free)' : '(-1 credit)'}
-                  </Text>
-                </Text>
-              </View>
-
-              <View style={[styles.checkbox, announceToEveryone && styles.checkboxActive]}>
-                {announceToEveryone && <CheckCircle size={14} color="#0F172A" />}
-              </View>
-            </View>
-
-            <Text style={styles.announceSubtext}>
-              {isAnnouncementFree
-                ? `⚡ ${freebiesRemaining} freebie${freebiesRemaining === 1 ? '' : 's'} left in your allowance. Next free announcement window opens automatically after cooldown.`
-                : '⏳ Free allowance exhausted or cooldown active. Announcement costs 1 credit from your balance.'}
-            </Text>
-          </TouchableOpacity>
-        </>
-      )}
-
-      {/* 11. Live Credit Preview */}
-      <View style={styles.previewCard}>
-        <View style={styles.previewHeader}>
-          <Info size={18} color="#38BDF8" style={{ marginRight: 6 }} />
-          <Text style={styles.previewTitle}>Credit Economy Preview</Text>
         </View>
 
-        {previewLoading ? (
-          <ActivityIndicator color="#38BDF8" style={{ padding: 10 }} />
-        ) : (
-          <View style={styles.breakdownTable}>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Host Upfront Fee</Text>
-              <Text style={styles.breakdownFee}>
-                -{previewData?.hostCost || 0} Credit{previewData?.hostCost === 1 ? '' : 's'}
-              </Text>
-            </View>
-
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Learner Cost (per person)</Text>
-              <Text style={styles.breakdownVal}>
-                {previewData?.learnerCostPerPerson || 0} Credit(s)
-              </Text>
-            </View>
-
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Estimated Teaching Payout</Text>
-              <Text style={styles.breakdownEarn}>
-                +{previewData?.projectedEarnings || 0} Credits
-              </Text>
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownNetLabel}>Net Host Result</Text>
-              <Text style={styles.breakdownNetVal}>
-                +{previewData?.netHostResult || 0} Credits
-              </Text>
-            </View>
-
-            {previewData?.notes?.map((note: string, idx: number) => (
-              <Text key={idx} style={styles.previewNote}>
-                • {note}
-              </Text>
-            ))}
-          </View>
-        )}
+        <Text style={styles.stepIndicatorText}>Step {currentStep} of 4</Text>
       </View>
 
-      {/* Submit Button */}
-      <TouchableOpacity
-        style={styles.submitBtn}
-        onPress={handleCreate}
-        disabled={submitLoading}
-        activeOpacity={0.8}
+      <ScrollView
+        style={styles.scrollArea}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        {submitLoading ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <Text style={styles.submitBtnText}>Confirm & Host Session</Text>
+        {/* ================= STEP 1: TITLE, FORMAT & OVERVIEW (Page 3) ================= */}
+        {currentStep === 1 && (
+          <View>
+            {/* Mentor Banner */}
+            <View style={styles.mentorBanner}>
+              <View style={styles.mentorAvatarCircle}>
+                <Text style={styles.mentorAvatarInitials}>CA</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.mentorBannerLabel}>HOSTING AS</Text>
+                <Text style={styles.mentorBannerName}>
+                  {currentUser?.name || 'Campus Administrator'}
+                </Text>
+                <Text style={styles.mentorBannerUsername}>
+                  @{currentUser?.username || 'admin'}
+                </Text>
+              </View>
+              <View style={styles.verifiedBadge}>
+                <ShieldCheck size={14} color="#0E6245" style={{ marginRight: 4 }} />
+                <Text style={styles.verifiedBadgeText}>Verified host</Text>
+              </View>
+            </View>
+
+            {/* Main Title & Subtitle */}
+            <View style={styles.pageTitleBlock}>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                <Text style={styles.pageTitle}>Host a campus </Text>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={styles.pageTitle}>session</Text>
+                  <BrandUnderline width={76} style={{ marginTop: 2 }} />
+                </View>
+              </View>
+              <Text style={styles.pageSubtitle}>
+                Teach fellow students, build your portfolio and earn time-credits.
+              </Text>
+            </View>
+
+            {/* Title & Overview Section */}
+            <Text style={styles.sectionLabel}>TITLE & OVERVIEW</Text>
+
+            <View style={styles.inputCard}>
+              <View style={styles.inputHeaderRow}>
+                <Text style={styles.inputLabel}>Event title *</Text>
+                <Text style={styles.charCount}>{title.length}/80</Text>
+              </View>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g. Master React Native animations"
+                placeholderTextColor="#9CA3AF"
+                maxLength={80}
+                value={title}
+                onChangeText={setTitle}
+              />
+            </View>
+
+            <View style={[styles.inputCard, { marginTop: 14 }]}>
+              <View style={styles.inputHeaderRow}>
+                <Text style={styles.inputLabel}>Description</Text>
+                <Text style={styles.charCount}>{description.length}/500</Text>
+              </View>
+              <TextInput
+                style={[styles.textInput, { height: 75, textAlignVertical: 'top' }]}
+                placeholder="What will students learn?"
+                placeholderTextColor="#9CA3AF"
+                multiline
+                maxLength={500}
+                value={description}
+                onChangeText={setDescription}
+              />
+            </View>
+
+            {/* Session Format Section */}
+            <Text style={[styles.sectionLabel, { marginTop: 22 }]}>SESSION FORMAT</Text>
+
+            {/* Group Workshop Card */}
+            <TouchableOpacity
+              style={[
+                styles.formatCard,
+                sessionType === SessionType.GROUP ? styles.formatCardSelected : styles.formatCardUnselected,
+              ]}
+              onPress={() => setSessionType(SessionType.GROUP)}
+              activeOpacity={0.88}
+            >
+              <Users size={20} color="#111827" style={{ marginRight: 14 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.formatCardTitle}>Group workshop</Text>
+                <Text style={styles.formatCardDesc}>
+                  Single host · 2–15 students · 1 cr anti-spam
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Multi-host Collaborative Card */}
+            <TouchableOpacity
+              style={[
+                styles.formatCard,
+                sessionType === SessionType.MULTI_MENTOR ? styles.formatCardSelected : styles.formatCardUnselected,
+                { marginTop: 12 },
+              ]}
+              onPress={() => setSessionType(SessionType.MULTI_MENTOR)}
+              activeOpacity={0.88}
+            >
+              <Flame size={20} color="#111827" style={{ marginRight: 14 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.formatCardTitle}>Multi-host collaborative</Text>
+                <Text style={styles.formatCardDesc}>
+                  Co-hosts get invites · 1.5 cr/mentor
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* 1-on-1 Direct Mentoring Card */}
+            <TouchableOpacity
+              style={[
+                styles.formatCard,
+                sessionType === SessionType.ONE_TO_ONE ? styles.formatCardSelected : styles.formatCardUnselected,
+                { marginTop: 12 },
+              ]}
+              onPress={() => setSessionType(SessionType.ONE_TO_ONE)}
+              activeOpacity={0.88}
+            >
+              <User size={20} color="#111827" style={{ marginRight: 14 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.formatCardTitle}>1-on-1 direct mentoring</Text>
+                <Text style={styles.formatCardDesc}>
+                  One specific student · 1 cr/hr
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Conditional input for 1-on-1 */}
+            {sessionType === SessionType.ONE_TO_ONE && (
+              <View style={[styles.inputCard, { marginTop: 14 }]}>
+                <Text style={styles.inputLabel}>Student to Mentor (Name or @username)</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="e.g. Chiranjib Das (@chira)"
+                  placeholderTextColor="#9CA3AF"
+                  value={targetLearnerName}
+                  onChangeText={setTargetLearnerName}
+                />
+              </View>
+            )}
+
+            {/* Conditional input for Multi-host */}
+            {sessionType === SessionType.MULTI_MENTOR && (
+              <View style={[styles.inputCard, { marginTop: 14 }]}>
+                <Text style={styles.inputLabel}>Co-Host Username</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="e.g. priya_sharma"
+                  placeholderTextColor="#9CA3AF"
+                  value={coHostUsername}
+                  onChangeText={setCoHostUsername}
+                  autoCapitalize="none"
+                />
+              </View>
+            )}
+          </View>
         )}
-      </TouchableOpacity>
-    </ScrollView>
+
+        {/* ================= STEP 2: SKILLS & CALENDAR (Page 4) ================= */}
+        {currentStep === 2 && (
+          <View>
+            {/* Skills to teach header */}
+            <View style={styles.skillsHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={styles.subheadingText}>Skills to teach</Text>
+              </View>
+              <Text style={styles.tagsCountText}>{skillsTags.length} / 6 tags</Text>
+            </View>
+
+            {/* Selected Tags Pills */}
+            <View style={styles.selectedTagsRow}>
+              {skillsTags.map((tag) => (
+                <View key={tag} style={styles.darkTagChip}>
+                  <Text style={styles.darkTagChipText}>{tag}</Text>
+                  <TouchableOpacity onPress={() => handleRemoveSkill(tag)} style={{ marginLeft: 6 }}>
+                    <X size={13} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+
+            {/* Add Custom Skill input */}
+            <View style={styles.addSkillInputRow}>
+              <TextInput
+                style={styles.addSkillInput}
+                placeholder="Add a custom skill"
+                placeholderTextColor="#9CA3AF"
+                value={newSkillInput}
+                onChangeText={setNewSkillInput}
+                onSubmitEditing={() => handleAddSkill(newSkillInput)}
+              />
+              <TouchableOpacity
+                style={styles.addSkillBtn}
+                onPress={() => handleAddSkill(newSkillInput)}
+              >
+                <Plus size={16} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Suggested Topics Section */}
+            <Text style={styles.suggestedTopicsHeader}>SUGGESTED TOPICS</Text>
+            <View style={styles.suggestedGrid}>
+              {SUGGESTED_SKILLS.map((item) => (
+                <TouchableOpacity
+                  key={item}
+                  style={styles.suggestedPill}
+                  onPress={() => handleAddSkill(item)}
+                >
+                  <Text style={styles.suggestedPillText}>+ {item}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* When Will it Happen (Calendar) */}
+            <Text style={[styles.sectionLabel, { marginTop: 26 }]}>WHEN WILL IT HAPPEN?</Text>
+
+            {/* Month Header */}
+            <View style={styles.monthHeaderRow}>
+              <Text style={styles.monthTitle}>
+                {monthName} {year}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    const prev = new Date(calendarDate);
+                    prev.setMonth(prev.getMonth() - 1);
+                    setCalendarDate(prev);
+                  }}
+                >
+                  <ChevronLeft size={20} color="#111827" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    const next = new Date(calendarDate);
+                    next.setMonth(next.getMonth() + 1);
+                    setCalendarDate(next);
+                  }}
+                >
+                  <ChevronRight size={20} color="#111827" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Days of Week Header */}
+            <View style={styles.daysOfWeekRow}>
+              {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((d) => (
+                <Text key={d} style={styles.dayOfWeekText}>
+                  {d}
+                </Text>
+              ))}
+            </View>
+
+            {/* Calendar Grid */}
+            <View style={styles.calendarGrid}>
+              {calendarDays.map((item, index) => {
+                if (!item.isCurrentMonth) {
+                  return (
+                    <View key={index} style={styles.calendarDayCell}>
+                      <View style={styles.dayDashedCircle}>
+                        <Text style={styles.dayMutedText}>{item.day || ''}</Text>
+                      </View>
+                    </View>
+                  );
+                }
+
+                const isSelected = calendarDate.getDate() === item.day;
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.calendarDayCell}
+                    onPress={() => {
+                      const newD = new Date(calendarDate);
+                      newD.setDate(item.day);
+                      setCalendarDate(newD);
+                    }}
+                  >
+                    <View
+                      style={[
+                        styles.dayCircle,
+                        isSelected && styles.dayCircleSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.dayText,
+                          isSelected && styles.dayTextSelected,
+                        ]}
+                      >
+                        {item.day}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* ================= STEP 3: TIME, CAPACITY & PRIVACY (Page 5) ================= */}
+        {currentStep === 3 && (
+          <View>
+            {/* Header: Select Session Time */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+              <Clock size={16} color="#111827" style={{ marginRight: 6 }} />
+              <Text style={styles.subheadingText}>Select session time</Text>
+            </View>
+
+            {/* Popular Slots */}
+            <Text style={styles.smallSectionLabel}>POPULAR SLOTS</Text>
+            <View style={styles.slotsRow}>
+              {POPULAR_SLOTS.map((slot) => (
+                <TouchableOpacity
+                  key={slot}
+                  style={styles.slotPill}
+                  onPress={() => handleSelectPopularSlot(slot)}
+                >
+                  <Text style={styles.slotPillText}>{slot}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Hour Selector (1 - 12) */}
+            <Text style={[styles.smallSectionLabel, { marginTop: 14 }]}>HOUR</Text>
+            <View style={styles.numGrid}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((h) => {
+                const isSelected = selectedHour === h;
+                return (
+                  <TouchableOpacity
+                    key={h}
+                    style={[styles.numCell, isSelected && styles.numCellSelected]}
+                    onPress={() => setSelectedHour(h)}
+                  >
+                    <Text style={[styles.numText, isSelected && styles.numTextSelected]}>
+                      {h}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Minute & Period Selectors */}
+            <View style={styles.minutePeriodRow}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={styles.smallSectionLabel}>MINUTE</Text>
+                <View style={styles.minuteGrid}>
+                  {[':00', ':15', ':30', ':45'].map((m) => {
+                    const isSelected = selectedMinute === m;
+                    return (
+                      <TouchableOpacity
+                        key={m}
+                        style={[styles.minuteCell, isSelected && styles.numCellSelected]}
+                        onPress={() => setSelectedMinute(m)}
+                      >
+                        <Text style={[styles.numText, isSelected && styles.numTextSelected]}>
+                          {m}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={{ width: 110 }}>
+                <Text style={styles.smallSectionLabel}>PERIOD</Text>
+                <View style={styles.periodRow}>
+                  {(['AM', 'PM'] as const).map((p) => {
+                    const isSelected = selectedPeriod === p;
+                    return (
+                      <TouchableOpacity
+                        key={p}
+                        style={[styles.periodCell, isSelected && styles.numCellSelected]}
+                        onPress={() => setSelectedPeriod(p)}
+                      >
+                        <Text style={[styles.numText, isSelected && styles.numTextSelected]}>
+                          {p}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+
+            {/* Time Summary Banner */}
+            <View style={styles.timeSummaryBanner}>
+              <Calendar size={15} color="#0E6245" style={{ marginRight: 8 }} />
+              <Text style={styles.timeSummaryText}>
+                {computeFinalDate().toLocaleDateString('default', {
+                  weekday: 'long',
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })}{' '}
+                at {selectedHour}{selectedMinute} {selectedPeriod}
+              </Text>
+            </View>
+
+            {/* Max Students (Capacity Stepper) */}
+            <Text style={[styles.sectionLabel, { marginTop: 22 }]}>MAX STUDENTS</Text>
+            <View style={styles.capacityCard}>
+              <View>
+                <Text style={styles.capacityTitle}>Limit: {maxParticipants} students</Text>
+                <Text style={styles.capacitySub}>Min 2 · Max 15</Text>
+              </View>
+
+              <View style={styles.stepperWrap}>
+                <TouchableOpacity
+                  style={styles.stepperBtn}
+                  onPress={() => setMaxParticipants(Math.max(2, maxParticipants - 1))}
+                >
+                  <Minus size={16} color="#111827" />
+                </TouchableOpacity>
+
+                <Text style={styles.stepperCount}>{maxParticipants}</Text>
+
+                <TouchableOpacity
+                  style={styles.stepperBtn}
+                  onPress={() => setMaxParticipants(Math.min(15, maxParticipants + 1))}
+                >
+                  <Plus size={16} color="#111827" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Access & Privacy */}
+            <Text style={[styles.sectionLabel, { marginTop: 22 }]}>ACCESS & PRIVACY</Text>
+            <View style={styles.privacyRow}>
+              {/* Public Card */}
+              <TouchableOpacity
+                style={[
+                  styles.privacyCard,
+                  !isPrivate ? styles.privacyCardSelected : styles.privacyCardUnselected,
+                ]}
+                onPress={() => setIsPrivate(false)}
+                activeOpacity={0.88}
+              >
+                <Globe size={18} color="#111827" style={{ marginBottom: 6 }} />
+                <Text style={styles.privacyTitle}>Public</Text>
+                <Text style={styles.privacySub}>Open to any campus student</Text>
+              </TouchableOpacity>
+
+              {/* Private Card */}
+              <TouchableOpacity
+                style={[
+                  styles.privacyCard,
+                  isPrivate ? styles.privacyCardSelected : styles.privacyCardUnselected,
+                ]}
+                onPress={() => setIsPrivate(true)}
+                activeOpacity={0.88}
+              >
+                <Lock size={18} color="#111827" style={{ marginBottom: 6 }} />
+                <Text style={styles.privacyTitle}>Private</Text>
+                <Text style={styles.privacySub}>Needs a secret joining code</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* ================= STEP 4: DURATION, LOCATION & CONFIRM (Page 6) ================= */}
+        {currentStep === 4 && (
+          <View>
+            {/* Duration Section */}
+            <Text style={styles.sectionLabel}>DURATION</Text>
+            <View style={styles.durationRow}>
+              {DURATIONS.map((dur) => {
+                const isSelected = durationHours === dur;
+                return (
+                  <TouchableOpacity
+                    key={dur}
+                    style={[
+                      styles.durationPill,
+                      isSelected ? styles.durationPillSelected : styles.durationPillUnselected,
+                    ]}
+                    onPress={() => setDurationHours(dur)}
+                  >
+                    <Text
+                      style={[
+                        styles.durationPillText,
+                        isSelected ? styles.durationPillTextSelected : styles.durationPillTextUnselected,
+                      ]}
+                    >
+                      {dur} hr{dur > 1 ? 's' : ''}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Location Section */}
+            <Text style={[styles.sectionLabel, { marginTop: 20 }]}>LOCATION</Text>
+            <View style={styles.locationRow}>
+              {[
+                { mode: LocationMode.ONLINE, label: 'Online', icon: Globe },
+                { mode: LocationMode.OFFLINE, label: 'Offline', icon: MapPin },
+                { mode: LocationMode.HYBRID, label: 'Hybrid', icon: Globe },
+              ].map((loc) => {
+                const isSelected = locationMode === loc.mode;
+                const IconCmp = loc.icon;
+                return (
+                  <TouchableOpacity
+                    key={loc.mode}
+                    style={[
+                      styles.locationPill,
+                      isSelected ? styles.locationPillSelected : styles.locationPillUnselected,
+                    ]}
+                    onPress={() => setLocationMode(loc.mode)}
+                  >
+                    <IconCmp size={14} color={isSelected ? '#FFFFFF' : '#111827'} style={{ marginRight: 6 }} />
+                    <Text
+                      style={[
+                        styles.locationPillText,
+                        isSelected ? styles.durationPillTextSelected : styles.durationPillTextUnselected,
+                      ]}
+                    >
+                      {loc.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Meeting link input */}
+            <View style={[styles.inputCard, { marginTop: 14 }]}>
+              <Text style={styles.inputLabel}>Meeting link</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="https://meet.google.com/..."
+                placeholderTextColor="#9CA3AF"
+                value={meetingLink}
+                onChangeText={setMeetingLink}
+              />
+            </View>
+
+            {/* Announcement Toggle Card */}
+            <View style={styles.announceCard}>
+              <Megaphone size={20} color="#111827" style={{ marginRight: 12 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.announceTitle}>
+                  Announce to everyone <Text style={{ color: '#0E6245' }}>(free)</Text>
+                </Text>
+                <Text style={styles.announceSub}>
+                  3 free announcements left in your allowance.
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.checkCircleToggle,
+                  announceToEveryone ? styles.checkCircleActive : styles.checkCircleInactive,
+                ]}
+                onPress={() => setAnnounceToEveryone(!announceToEveryone)}
+              >
+                {announceToEveryone && <Check size={14} color="#FFFFFF" />}
+              </TouchableOpacity>
+            </View>
+
+            {/* Credit Economy Preview Card (Artboard Page 6) */}
+            <View style={styles.economyPreviewCard}>
+              <View style={styles.economyHeaderRow}>
+                <Info size={16} color="#0E6245" style={{ marginRight: 6 }} />
+                <Text style={styles.economyHeaderTitle}>Credit economy preview</Text>
+              </View>
+
+              <View style={styles.economyLineRow}>
+                <Text style={styles.economyLineLabel}>Host upfront fee</Text>
+                <Text style={styles.economyLineNegative}>-1 credit</Text>
+              </View>
+
+              <View style={styles.economyLineRow}>
+                <Text style={styles.economyLineLabel}>Learner cost (per person)</Text>
+                <Text style={styles.economyLineNeutral}>{durationHours} credits</Text>
+              </View>
+
+              <View style={styles.economyLineRow}>
+                <Text style={styles.economyLineLabel}>Estimated teaching payout</Text>
+                <Text style={styles.economyLinePositive}>
+                  +{Math.round(maxParticipants * durationHours)} credits
+                </Text>
+              </View>
+
+              <View style={styles.economyDivider} />
+
+              <View style={styles.economyLineRow}>
+                <Text style={styles.economyNetLabel}>Net host result</Text>
+                <Text style={styles.economyNetPositive}>
+                  +{Math.round(maxParticipants * durationHours) - 1} credits
+                </Text>
+              </View>
+
+              <Text style={styles.economyDisclaimer}>
+                The 1 credit anti-spam fee is non-refundable. Earnings floor is max(3, attendees × duration).
+              </Text>
+            </View>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Bottom Floating Navigation CTA */}
+      <View style={styles.bottomBar}>
+        {currentStep < 4 ? (
+          <TouchableOpacity style={styles.primaryNextBtn} onPress={handleNext}>
+            <Text style={styles.primaryBtnText}>Next</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.primaryNextBtn}
+            onPress={handleConfirmAndHost}
+            disabled={submitLoading}
+          >
+            {submitLoading ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={styles.primaryBtnText}>Confirm & host session</Text>
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#F8FAF9',
   },
-  content: {
-    padding: 18,
-    paddingBottom: 40,
+  // Top Header
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 10,
+    backgroundColor: '#F8FAF9',
   },
-  hostIdentifierBanner: {
+  backBtn: {
+    padding: 4,
+  },
+  headerTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  stepIndicatorText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#5A6561',
+  },
+  scrollArea: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 100,
+  },
+  // Mentor banner (Step 1)
+  mentorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0F172A',
-    borderWidth: 1.5,
-    borderColor: '#1E293B',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 16,
-  },
-  hostIdentifierLabel: {
-    color: '#64748B',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  hostRealName: {
-    color: '#F8FAFC',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  hostUsername: {
-    color: '#38BDF8',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  verifiedHostTag: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#10B981',
-  },
-  verifiedHostText: {
-    color: '#10B981',
-    fontSize: 10,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  screenHeader: {
-    color: '#F8FAFC',
-    fontSize: 24,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  screenSub: {
-    color: '#94A3B8',
-    fontSize: 13,
-    lineHeight: 18,
+    backgroundColor: '#EBF7F0',
+    borderRadius: 20,
+    padding: 14,
     marginBottom: 20,
   },
+  mentorAvatarCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#0E6245',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  mentorAvatarInitials: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  mentorBannerLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0E6245',
+    letterSpacing: 0.5,
+  },
+  mentorBannerName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  mentorBannerUsername: {
+    fontSize: 12,
+    color: '#0E6245',
+    fontWeight: '600',
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  verifiedBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  // Page Title Block
+  pageTitleBlock: {
+    marginBottom: 20,
+  },
+  pageTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  pageSubtitle: {
+    fontSize: 13,
+    color: '#5A6561',
+    marginTop: 4,
+    lineHeight: 18,
+  },
   sectionLabel: {
-    color: '#94A3B8',
     fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 1,
-    marginBottom: 8,
-    marginTop: 6,
+    color: '#5A6561',
+    letterSpacing: 0.8,
+    marginBottom: 10,
   },
   inputCard: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#1E293B',
-    padding: 16,
-    marginBottom: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
   },
   inputHeaderRow: {
     flexDirection: 'row',
@@ -678,307 +990,538 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 6,
   },
-  inputFieldTitle: {
-    color: '#E2E8F0',
+  inputLabel: {
     fontSize: 13,
     fontWeight: '700',
+    color: '#111827',
   },
-  charCounter: {
-    color: '#64748B',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  charCounterLimit: {
-    color: '#EF4444',
+  charCount: {
+    fontSize: 12,
+    color: '#9CA3AF',
   },
   textInput: {
-    backgroundColor: '#090D16',
-    borderWidth: 1,
-    borderColor: '#334155',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: '#F8FAFC',
     fontSize: 14,
+    color: '#111827',
+    padding: 0,
   },
-  textArea: {
-    minHeight: 80,
-    textAlignVertical: 'top',
+  // Format Cards (Step 1)
+  formatCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 18,
+    padding: 16,
   },
-  inputCardTitle: {
-    color: '#F8FAFC',
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  inputCardSub: {
-    color: '#64748B',
-    fontSize: 12,
-    marginBottom: 10,
-  },
-  typeSelector: {
-    gap: 10,
-    marginBottom: 18,
-  },
-  typeCard: {
-    backgroundColor: '#0F172A',
-    borderRadius: 14,
+  formatCardSelected: {
+    backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: '#1E293B',
-    padding: 14,
+    borderColor: '#111827',
   },
-  typeCardActive: {
-    borderColor: '#38BDF8',
-    backgroundColor: '#111D30',
+  formatCardUnselected: {
+    backgroundColor: '#EBF7F0',
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
-  typeTitle: {
-    color: '#CBD5E1',
+  formatCardTitle: {
     fontSize: 15,
-    fontWeight: '700',
-    marginTop: 6,
+    fontWeight: '800',
+    color: '#111827',
     marginBottom: 2,
   },
-  typeTitleActive: {
-    color: '#F8FAFC',
-  },
-  typeDesc: {
-    color: '#64748B',
+  formatCardDesc: {
     fontSize: 12,
+    color: '#5A6561',
   },
-  stepperContainer: {
+  // Step 2 Styles (Skills & Calendar)
+  skillsHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 10,
   },
-  capacityHeader: {
-    color: '#F8FAFC',
-    fontSize: 14,
+  subheadingText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  tagsCountText: {
+    fontSize: 12,
+    color: '#5A6561',
     fontWeight: '600',
   },
-  capacityHighlight: {
-    color: '#38BDF8',
-    fontWeight: '800',
+  selectedTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 14,
   },
-  capacitySub: {
-    color: '#64748B',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  stepperButtons: {
+  darkTagChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    backgroundColor: '#18201D',
+    borderRadius: 16,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
   },
-  stepperBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    backgroundColor: '#1E293B',
+  darkTagChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  addSkillInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+    paddingLeft: 14,
+    paddingRight: 6,
+    height: 48,
+    marginBottom: 18,
+  },
+  addSkillInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#111827',
+  },
+  addSkillBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#18201D',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  stepperBtnDisabled: {
-    opacity: 0.3,
+  suggestedTopicsHeader: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#B45309',
+    letterSpacing: 0.8,
+    marginBottom: 10,
   },
-  stepperBtnText: {
-    color: '#F8FAFC',
+  suggestedGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  suggestedPill: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+  },
+  suggestedPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  // Calendar (Step 2)
+  monthHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  monthTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: '#111827',
   },
-  stepperValueText: {
-    color: '#F8FAFC',
+  daysOfWeekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  dayOfWeekText: {
+    width: 40,
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDayCell: {
+    width: '14.28%',
+    height: 42,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dayCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dayCircleSelected: {
+    backgroundColor: '#18201D',
+  },
+  dayDashedCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#CBD5E1',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dayText: {
+    fontSize: 13,
+    color: '#111827',
+    fontWeight: '600',
+  },
+  dayTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  dayMutedText: {
+    fontSize: 11,
+    color: '#9CA3AF',
+  },
+  // Step 3 Styles (Time Slots)
+  smallSectionLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#5A6561',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  slotsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  slotPill: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+  },
+  slotPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  numGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  numCell: {
+    width: '15.3%',
+    height: 42,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+  },
+  numCellSelected: {
+    backgroundColor: '#18201D',
+    borderColor: '#18201D',
+  },
+  numText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  numTextSelected: {
+    color: '#FFFFFF',
+  },
+  minutePeriodRow: {
+    flexDirection: 'row',
+    marginTop: 14,
+  },
+  minuteGrid: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  minuteCell: {
+    flex: 1,
+    height: 42,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+  },
+  periodRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  periodCell: {
+    flex: 1,
+    height: 42,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+  },
+  timeSummaryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EBF7F0',
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 16,
+  },
+  timeSummaryText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0E6245',
+  },
+  capacityCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#EBF7F0',
+    borderRadius: 18,
+    padding: 16,
+  },
+  capacityTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0E6245',
+  },
+  capacitySub: {
+    fontSize: 12,
+    color: '#5A6561',
+    marginTop: 2,
+  },
+  stepperWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  stepperBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepperCount: {
     fontSize: 16,
     fontWeight: '800',
+    color: '#111827',
     minWidth: 20,
     textAlign: 'center',
   },
-  accessContainer: {
+  privacyRow: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 18,
+    gap: 12,
   },
-  accessCard: {
+  privacyCard: {
     flex: 1,
-    backgroundColor: '#0F172A',
-    borderRadius: 12,
+    borderRadius: 18,
+    padding: 14,
+  },
+  privacyCardSelected: {
+    backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: '#1E293B',
-    padding: 12,
+    borderColor: '#111827',
   },
-  accessCardActive: {
-    borderColor: '#38BDF8',
-    backgroundColor: '#111D30',
+  privacyCardUnselected: {
+    backgroundColor: '#EBF7F0',
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
-  accessTitle: {
-    color: '#94A3B8',
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 2,
+  privacyTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#111827',
   },
-  accessTitleActive: {
-    color: '#F8FAFC',
-  },
-  accessDesc: {
-    color: '#64748B',
+  privacySub: {
     fontSize: 11,
+    color: '#5A6561',
+    marginTop: 2,
+    lineHeight: 14,
   },
+  // Step 4 Styles (Duration, Location, Preview)
   durationRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 18,
   },
-  durationChip: {
+  durationPill: {
     flex: 1,
-    backgroundColor: '#0F172A',
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: '#1E293B',
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  durationChipActive: {
-    borderColor: '#38BDF8',
-    backgroundColor: '#111D30',
-  },
-  durationText: {
-    color: '#64748B',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  durationTextActive: {
-    color: '#38BDF8',
-    fontWeight: '800',
-  },
-  announceCard: {
-    backgroundColor: '#0F172A',
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#1E293B',
-    padding: 14,
-    marginBottom: 18,
-  },
-  announceCardActive: {
-    borderColor: '#38BDF8',
-    backgroundColor: '#0E1E33',
-  },
-  announceTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  announceTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  announceTitle: {
-    color: '#F8FAFC',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  freePill: {
-    color: '#10B981',
-    fontWeight: '800',
-  },
-  paidPill: {
-    color: '#F59E0B',
-    fontWeight: '800',
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#475569',
+    height: 42,
+    borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  checkboxActive: {
-    backgroundColor: '#38BDF8',
-    borderColor: '#38BDF8',
+  durationPillSelected: {
+    backgroundColor: '#18201D',
   },
-  announceSubtext: {
-    color: '#94A3B8',
-    fontSize: 12,
-    lineHeight: 16,
+  durationPillUnselected: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
   },
-  previewCard: {
-    backgroundColor: '#0F172A',
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#1E293B',
+  durationPillText: {
+    fontSize: 13,
+  },
+  durationPillTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  durationPillTextUnselected: {
+    color: '#111827',
+    fontWeight: '600',
+  },
+  locationRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  locationPill: {
+    flex: 1,
+    height: 42,
+    borderRadius: 21,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  locationPillSelected: {
+    backgroundColor: '#18201D',
+  },
+  locationPillUnselected: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+  },
+  locationPillText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  announceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
     padding: 16,
-    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+    marginTop: 14,
   },
-  previewHeader: {
+  announceTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  announceSub: {
+    fontSize: 12,
+    color: '#5A6561',
+    marginTop: 2,
+  },
+  checkCircleToggle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkCircleActive: {
+    backgroundColor: '#0E6245',
+  },
+  checkCircleInactive: {
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+  },
+  economyPreviewCard: {
+    backgroundColor: '#EBF7F0',
+    borderRadius: 20,
+    padding: 18,
+    marginTop: 18,
+  },
+  economyHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
   },
-  previewTitle: {
-    color: '#F8FAFC',
+  economyHeaderTitle: {
     fontSize: 15,
     fontWeight: '800',
+    color: '#111827',
   },
-  breakdownTable: {
-    gap: 8,
-  },
-  breakdownRow: {
+  economyLineRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 8,
   },
-  breakdownLabel: {
-    color: '#94A3B8',
+  economyLineLabel: {
     fontSize: 13,
+    color: '#374151',
   },
-  breakdownFee: {
-    color: '#EF4444',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  breakdownVal: {
-    color: '#F8FAFC',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  breakdownEarn: {
-    color: '#10B981',
+  economyLineNegative: {
     fontSize: 13,
     fontWeight: '700',
+    color: '#B91C1C',
   },
-  divider: {
+  economyLineNeutral: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  economyLinePositive: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0E6245',
+  },
+  economyDivider: {
     height: 1,
-    backgroundColor: '#1E293B',
-    marginVertical: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.08)',
+    marginVertical: 8,
   },
-  breakdownNetLabel: {
-    color: '#F8FAFC',
+  economyNetLabel: {
     fontSize: 14,
     fontWeight: '800',
+    color: '#111827',
   },
-  breakdownNetVal: {
-    color: '#38BDF8',
-    fontSize: 15,
+  economyNetPositive: {
+    fontSize: 14,
     fontWeight: '800',
+    color: '#0E6245',
   },
-  previewNote: {
-    color: '#64748B',
+  economyDisclaimer: {
     fontSize: 11,
-    marginTop: 2,
+    color: '#5A6561',
+    lineHeight: 16,
+    marginTop: 8,
   },
-  submitBtn: {
-    backgroundColor: '#2563EB',
-    borderRadius: 14,
+  // Bottom Floating Bar
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
     paddingVertical: 14,
-    alignItems: 'center',
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    backgroundColor: '#F8FAF9',
+    borderTopWidth: 1,
+    borderTopColor: '#EEF2F0',
   },
-  submitBtnText: {
+  primaryNextBtn: {
+    backgroundColor: '#0E6245',
+    borderRadius: 28,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  primaryBtnText: {
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '800',

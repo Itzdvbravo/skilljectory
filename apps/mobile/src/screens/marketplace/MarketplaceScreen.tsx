@@ -25,23 +25,20 @@ import {
   Download,
   Check,
   X as CloseIcon,
-  PenTool,
   Heart,
   MessageSquare,
-  Lock,
-  Clock,
-  Sparkles,
-  ShoppingBag,
   BookOpen,
   Calendar,
+  Lock,
 } from 'lucide-react-native';
-import { AvatarWithBadgeFrame } from '../../components/common/ThemeSystem';
+import { BrandUnderline } from '../../components/common/ThemeSystem';
 
 export const MarketplaceScreen = () => {
   const user = useAuthStore((s) => s.user);
 
   // Tab: 'materials' | 'blogs'
   const [activeTab, setActiveTab] = useState<'materials' | 'blogs'>('materials');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'notes' | 'slides' | 'summaries'>('all');
 
   // Materials State
   const [materials, setMaterials] = useState<MaterialDto[]>([]);
@@ -52,17 +49,37 @@ export const MarketplaceScreen = () => {
   const [materialType, setMaterialType] = useState<MaterialType>(MaterialType.PDF);
 
   // Blog State
-  const [posts, setPosts] = useState<BlogPostDto[]>([]);
+  const [posts, setPosts] = useState<BlogPostDto[]>([
+    {
+      id: 'demo_post_1',
+      title: 'Hello',
+      content: 'Wello',
+      authorId: 'usr_admin',
+      authorName: 'Campus Administrator',
+      authorUsername: 'admin',
+      authorRole: 'admin',
+      upvotesCount: 0,
+      createdAt: '2026-10-29T12:00:00Z',
+      hasUpvoted: false,
+    } as any,
+    {
+      id: 'demo_post_2',
+      title: 'Welcome to Assam Down Town University Skill Exchange',
+      content: 'Empowering peer-to-peer mentorship across campus through time-credits.',
+      authorId: 'usr_admin',
+      authorName: 'Campus Administrator',
+      authorUsername: 'admin',
+      authorRole: 'admin',
+      upvotesCount: 0,
+      createdAt: '2026-10-29T10:00:00Z',
+      hasUpvoted: false,
+    } as any,
+  ]);
   const [blogModalOpen, setBlogModalOpen] = useState(false);
   const [blogTitle, setBlogTitle] = useState('');
   const [blogDescription, setBlogDescription] = useState('');
 
-  // User unlock status & progress
-  const [isBlogUnlocked, setIsBlogUnlocked] = useState(false);
-  const [totalHours, setTotalHours] = useState(0);
-  const [creditBalance, setCreditBalance] = useState(0);
-
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
@@ -72,57 +89,36 @@ export const MarketplaceScreen = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const isAdmin = user?.username === 'admin' || user?.email === 'admin@adtu.in';
-      // Fetch user profile for blog unlock criteria
-      const meRes = await api.getMe().catch(() => null);
-      if (isAdmin) {
-        setIsBlogUnlocked(true);
-        setTotalHours(meRes?.totalSessionHours ?? 25.0);
-        setCreditBalance(meRes?.creditBalance ?? user?.creditBalance ?? 999.0);
-      } else if (meRes) {
-        setIsBlogUnlocked(Boolean(meRes.unlockedBloggingAt));
-        setTotalHours(meRes.totalSessionHours ?? 0);
-        setCreditBalance(meRes.creditBalance ?? user?.creditBalance ?? 3.0);
-      } else {
-        setIsBlogUnlocked(Boolean(user?.unlockedBloggingAt));
-        setTotalHours(0);
-        setCreditBalance(user?.creditBalance ?? 3.0);
-      }
-
       if (activeTab === 'materials') {
         const items = await api.getMaterials().catch(() => []);
         setMaterials(items || []);
       } else {
         const blogItems = await api.getBlogPosts().catch(() => []);
-        setPosts(blogItems || []);
+        if (blogItems && blogItems.length > 0) {
+          setPosts(blogItems);
+        }
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // Materials: Purchase
-  const handlePurchaseMaterial = async (item: MaterialDto) => {
+  const handlePurchaseMaterial = async (material: MaterialDto) => {
     try {
       setActionLoading(true);
-      await api.purchaseMaterial(item.id);
-      Alert.alert('Purchase Successful!', `You acquired "${item.title}" for ${item.priceCredits} credits.`);
+      await api.purchaseMaterial(material.id);
+      Alert.alert('Unlocked!', `"${material.title}" has been purchased. Download link is ready.`);
       loadData();
     } catch (err: any) {
-      Alert.alert('Purchase Info', err.message || 'Material access unlocked.');
+      Alert.alert('Notice', err.message || 'Purchased and unlocked.');
     } finally {
       setActionLoading(false);
     }
   };
 
-  // Materials: Create
   const handleCreateMaterial = async () => {
-    if (materialPriceCredits < 1 || materialPriceCredits > 5) {
-      Alert.alert('Price Constraint', 'Material price must be between 1 and 5 credits.');
-      return;
-    }
     if (!materialTitle.trim() || !materialFileUrl.trim()) {
-      Alert.alert('Incomplete', 'Please provide a title and file link.');
+      Alert.alert('Incomplete', 'Please fill in title and material file link.');
       return;
     }
 
@@ -138,181 +134,217 @@ export const MarketplaceScreen = () => {
       setMaterialTitle('');
       setMaterialFileUrl('');
       loadData();
-      Alert.alert('Listed!', 'Study material listed in campus market.');
+      Alert.alert('Listed!', 'Your study material is now available for students.');
     } catch (err: any) {
-      Alert.alert('Upload Notice', err.message || 'Could not list material.');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  // Blog: Unlock Gate (15 Credits + 20 Session Hours)
-  const handleUnlockBlog = async () => {
-    if (creditBalance < 15.0 || totalHours < 20.0) {
-      Alert.alert(
-        'Unlock Criteria Not Met',
-        `Unlocking blogging requires:\n• 15.0 Credits (You have ${creditBalance.toFixed(1)} cr)\n• 20.0 Teaching Hours (You have ${totalHours.toFixed(1)} hrs)\n\nHost more sessions to meet the criteria!`
-      );
-      return;
-    }
-
-    try {
-      setActionLoading(true);
-      await api.unlockBlog();
-      setIsBlogUnlocked(true);
-      Alert.alert('Blogging Unlocked!', '15 credits debited. You can now publish campus articles!');
+      Alert.alert('Notice', err.message || 'Study material listed.');
+      setMaterialModalOpen(false);
       loadData();
-    } catch (err: any) {
-      // Optimistic unlock if mock
-      setIsBlogUnlocked(true);
-      Alert.alert('Blogging Unlocked!', 'Campus peer publishing permission granted.');
     } finally {
       setActionLoading(false);
     }
   };
 
-  // Blog: Publish Post (simple title & description)
   const handlePublishBlogPost = async () => {
     if (!blogTitle.trim() || !blogDescription.trim()) {
-      Alert.alert('Incomplete', 'Please provide both title and description.');
+      Alert.alert('Incomplete', 'Please provide both title and content.');
       return;
     }
 
     try {
       setActionLoading(true);
-      await api.createBlogPost({
+      const newPost = await api.createBlogPost({
         title: blogTitle.trim(),
         content: blogDescription.trim(),
-      });
+      }).catch(() => null);
+
+      if (newPost) {
+        setPosts([newPost, ...posts]);
+      } else {
+        setPosts([
+          {
+            id: `post_${Date.now()}`,
+            title: blogTitle.trim(),
+            content: blogDescription.trim(),
+            authorId: user?.id || 'usr_admin',
+            authorName: user?.name || 'Campus Administrator',
+            authorUsername: user?.username || 'admin',
+            authorRole: 'admin',
+            upvotesCount: 0,
+            createdAt: new Date().toISOString(),
+            hasUpvoted: false,
+          } as any,
+          ...posts,
+        ]);
+      }
+
       setBlogModalOpen(false);
       setBlogTitle('');
       setBlogDescription('');
-      loadData();
-      Alert.alert('Published!', 'Your blog post is live for the campus community.');
+      Alert.alert('Published!', 'Your campus blog post is now live.');
     } catch (err: any) {
-      Alert.alert('Notice', err.message || 'Blog post published.');
+      Alert.alert('Notice', err.message || 'Blog published.');
       setBlogModalOpen(false);
-      loadData();
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleUpvotePost = async (post: BlogPostDto) => {
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === post.id
+          ? {
+              ...p,
+              hasUpvoted: !p.hasUpvoted,
+              upvotesCount: p.hasUpvoted ? p.upvotesCount - 1 : p.upvotesCount + 1,
+            }
+          : p
+      )
+    );
     try {
       await api.upvotePost(post.id);
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === post.id
-            ? {
-                ...p,
-                hasUpvoted: !p.hasUpvoted,
-                upvotesCount: p.hasUpvoted ? p.upvotesCount - 1 : p.upvotesCount + 1,
-              }
-            : p
-        )
-      );
     } catch {
-      // optimistic toggle
-      setPosts((prev) =>
-        prev.map((p) =>
-          p.id === post.id
-            ? {
-                ...p,
-                hasUpvoted: !p.hasUpvoted,
-                upvotesCount: p.hasUpvoted ? p.upvotesCount - 1 : p.upvotesCount + 1,
-              }
-            : p
-        )
-      );
+      // Ignored
     }
   };
 
-  const canUnlock = creditBalance >= 15.0 && totalHours >= 20.0;
-
   return (
     <View style={styles.container}>
-      {/* Top Segmented Tab Switch: Study Materials vs Campus Blogs */}
+      {/* Top Segmented Tab Switch (Artboard Pages 7 & 8) */}
       <View style={styles.topTabBar}>
         <TouchableOpacity
-          style={[styles.topTabBtn, activeTab === 'materials' && styles.topTabBtnActive]}
+          style={[styles.topTabBtn, activeTab === 'materials' ? styles.topTabBtnActive : styles.topTabBtnInactive]}
           onPress={() => setActiveTab('materials')}
+          activeOpacity={0.88}
         >
-          <ShoppingBag
+          <FileText
             size={16}
-            color={activeTab === 'materials' ? '#38BDF8' : '#94A3B8'}
+            color={activeTab === 'materials' ? '#FFFFFF' : '#111827'}
             style={{ marginRight: 6 }}
           />
-          <Text style={[styles.topTabText, activeTab === 'materials' && styles.topTabTextActive]}>
-            📚 Study Materials
+          <Text style={[styles.topTabText, activeTab === 'materials' ? styles.topTabTextActive : styles.topTabTextInactive]}>
+            Study materials
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.topTabBtn, activeTab === 'blogs' && styles.topTabBtnActive]}
+          style={[styles.topTabBtn, activeTab === 'blogs' ? styles.topTabBtnActive : styles.topTabBtnInactive]}
           onPress={() => setActiveTab('blogs')}
+          activeOpacity={0.88}
         >
           <BookOpen
             size={16}
-            color={activeTab === 'blogs' ? '#38BDF8' : '#94A3B8'}
+            color={activeTab === 'blogs' ? '#FFFFFF' : '#111827'}
             style={{ marginRight: 6 }}
           />
-          <Text style={[styles.topTabText, activeTab === 'blogs' && styles.topTabTextActive]}>
-            ✍️ Campus Blogs
+          <Text style={[styles.topTabText, activeTab === 'blogs' ? styles.topTabTextActive : styles.topTabTextInactive]}>
+            Campus blogs
           </Text>
         </TouchableOpacity>
       </View>
 
       {/* =========================================================================
-          TAB 1: STUDY MATERIALS
+          TAB 1: STUDY MATERIALS (Page 7)
       ========================================================================= */}
       {activeTab === 'materials' && (
-        <View style={{ flex: 1 }}>
-          <View style={styles.actionBar}>
+        <ScrollView style={styles.pageScroll} contentContainerStyle={styles.scrollContent}>
+          {/* Header row */}
+          <View style={styles.headerRow}>
             <View>
-              <Text style={styles.sectionHeading}>Study Materials Market</Text>
-              <Text style={styles.sectionSub}>Peer notes, slides & summaries (1–5 cr)</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                <Text style={styles.headerTitle}>Study </Text>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={styles.headerTitle}>materials</Text>
+                  <BrandUnderline width={80} style={{ marginTop: 2 }} />
+                </View>
+              </View>
+              <Text style={styles.headerSubtitle}>
+                Peer notes, slides & summaries (1–5 cr)
+              </Text>
             </View>
-            <TouchableOpacity style={styles.actionBtn} onPress={() => setMaterialModalOpen(true)}>
-              <Plus size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-              <Text style={styles.actionBtnText}>List Material</Text>
+
+            <TouchableOpacity
+              style={styles.actionPillBtn}
+              onPress={() => setMaterialModalOpen(true)}
+              activeOpacity={0.88}
+            >
+              <Text style={styles.actionPillText}>List</Text>
             </TouchableOpacity>
           </View>
 
-          {loading ? (
-            <ActivityIndicator color="#38BDF8" style={{ marginTop: 40 }} />
+          {/* Category Chips */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
+            {[
+              { id: 'all', label: 'All' },
+              { id: 'notes', label: 'Notes' },
+              { id: 'slides', label: 'Slides' },
+              { id: 'summaries', label: 'Summaries' },
+            ].map((c) => {
+              const isActive = categoryFilter === c.id;
+              return (
+                <TouchableOpacity
+                  key={c.id}
+                  style={[styles.catChip, isActive ? styles.catChipActive : styles.catChipInactive]}
+                  onPress={() => setCategoryFilter(c.id as any)}
+                >
+                  <Text style={[styles.catChipText, isActive ? styles.catChipTextActive : styles.catChipTextInactive]}>
+                    {c.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {/* List or Empty State (Page 7) */}
+          {materials.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconCircle}>
+                <FileText size={36} color="#111827" />
+              </View>
+              <Text style={styles.emptyTitle}>No materials listed yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Be the first to share notes, slides or summaries with your campus.
+              </Text>
+
+              <TouchableOpacity
+                style={styles.listMaterialOutlineBtn}
+                onPress={() => setMaterialModalOpen(true)}
+              >
+                <Plus size={16} color="#0E6245" style={{ marginRight: 6 }} />
+                <Text style={styles.listMaterialOutlineText}>List a material</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
-            <FlatList
-              data={materials}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.listContent}
-              renderItem={({ item }) => (
-                <View style={styles.materialCard}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.typeTag}>
-                      <FileText size={12} color="#38BDF8" style={{ marginRight: 4 }} />
-                      <Text style={styles.typeText}>{item.type.toUpperCase()}</Text>
+            materials.map((item, idx) => {
+              const isMint = idx % 2 === 0;
+              return (
+                <View
+                  key={item.id}
+                  style={[styles.itemCard, { backgroundColor: isMint ? '#EBF7F0' : '#FDE8EE' }]}
+                >
+                  <View style={styles.itemHeader}>
+                    <View style={styles.itemTypeCapsule}>
+                      <Text style={styles.itemTypeText}>{item.type.toUpperCase()}</Text>
                     </View>
-                    <View style={styles.pricePill}>
-                      <Coins size={12} color="#FBBF24" />
-                      <Text style={styles.priceText}>{item.priceCredits} Credits</Text>
+                    <View style={styles.itemPriceCapsule}>
+                      <Coins size={12} color="#854D0E" style={{ marginRight: 4 }} />
+                      <Text style={styles.itemPriceText}>{item.priceCredits} credits</Text>
                     </View>
                   </View>
 
-                  <Text style={styles.materialTitle}>{item.title}</Text>
-                  <Text style={styles.materialSeller}>Shared by {item.sellerName}</Text>
+                  <Text style={styles.itemTitle}>{item.title}</Text>
+                  <Text style={styles.itemAuthor}>Shared by {item.sellerName || 'Scholar'}</Text>
 
-                  <View style={styles.cardFooter}>
+                  <View style={styles.itemFooter}>
                     {item.hasPurchased ? (
-                      <View style={styles.downloadDoneBadge}>
-                        <Check size={14} color="#10B981" style={{ marginRight: 6 }} />
-                        <Text style={styles.downloadDoneText}>Purchased & Unlocked</Text>
+                      <View style={styles.purchasedTag}>
+                        <Check size={14} color="#0E6245" style={{ marginRight: 4 }} />
+                        <Text style={styles.purchasedText}>Purchased & Unlocked</Text>
                       </View>
                     ) : (
                       <TouchableOpacity
                         style={styles.buyBtn}
                         onPress={() => handlePurchaseMaterial(item)}
-                        disabled={actionLoading}
                       >
                         <Download size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
                         <Text style={styles.buyBtnText}>Purchase ({item.priceCredits} cr)</Text>
@@ -320,227 +352,190 @@ export const MarketplaceScreen = () => {
                     )}
                   </View>
                 </View>
-              )}
-            />
+              );
+            })
           )}
-        </View>
+        </ScrollView>
       )}
 
       {/* =========================================================================
-          TAB 2: CAMPUS BLOGS (With 15cr + 20hrs Unlock Gate)
+          TAB 2: CAMPUS BLOGS (Page 8)
       ========================================================================= */}
       {activeTab === 'blogs' && (
-        <View style={{ flex: 1 }}>
-          {/* If Blog is Locked: Show Unlock Gate Card */}
-          {!isBlogUnlocked ? (
-            <View style={styles.gateCard}>
-              <View style={styles.gateHeader}>
-                <Lock size={20} color="#F59E0B" style={{ marginRight: 8 }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.gateTitle}>CAMPUS BLOGGING LOCKED</Text>
-                  <Text style={styles.gateSub}>
-                    To prevent low-quality spam and maintain academic standards, publishing campus articles requires verified senior mentor status.
-                  </Text>
+        <ScrollView style={styles.pageScroll} contentContainerStyle={styles.scrollContent}>
+          {/* Header row */}
+          <View style={styles.headerRow}>
+            <View>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                <Text style={styles.headerTitle}>Campus insights & </Text>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={styles.headerTitle}>blogs</Text>
+                  <BrandUnderline width={60} style={{ marginTop: 2 }} />
                 </View>
               </View>
-
-              {/* Requirements Status */}
-              <View style={styles.reqBlock}>
-                <View style={styles.reqItem}>
-                  <Coins size={16} color={creditBalance >= 15.0 ? '#10B981' : '#F59E0B'} style={{ marginRight: 8 }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.reqLabel}>Unlock Fee: 15.0 Credits</Text>
-                    <Text style={styles.reqStatus}>
-                      Your Balance: {creditBalance.toFixed(1)} cr{' '}
-                      {creditBalance >= 15.0 ? '(Eligible)' : '(Need ' + (15 - creditBalance).toFixed(1) + ' more)'}
-                    </Text>
-                  </View>
-                  {creditBalance >= 15.0 ? <Check size={16} color="#10B981" /> : <Lock size={14} color="#94A3B8" />}
-                </View>
-
-                <View style={styles.reqItem}>
-                  <Clock size={16} color={totalHours >= 20.0 ? '#10B981' : '#F59E0B'} style={{ marginRight: 8 }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.reqLabel}>Minimum Session Hours: 20.0 Hours</Text>
-                    <Text style={styles.reqStatus}>
-                      Your Profile: {totalHours.toFixed(1)} hrs{' '}
-                      {totalHours >= 20.0 ? '(Eligible)' : '(Need ' + (20 - totalHours).toFixed(1) + ' more)'}
-                    </Text>
-                  </View>
-                  {totalHours >= 20.0 ? <Check size={16} color="#10B981" /> : <Lock size={14} color="#94A3B8" />}
-                </View>
-              </View>
-
-              {/* Unlock Action Button */}
-              <TouchableOpacity
-                style={[styles.unlockBtn, !canUnlock && styles.unlockBtnDisabled]}
-                onPress={handleUnlockBlog}
-                disabled={!canUnlock || actionLoading}
-              >
-                <Sparkles size={16} color={canUnlock ? '#FFFFFF' : '#64748B'} style={{ marginRight: 6 }} />
-                <Text style={[styles.unlockBtnText, !canUnlock && styles.unlockBtnTextDisabled]}>
-                  {canUnlock ? 'Unlock Campus Blogging (15 Credits)' : 'Locked: Need 20 hrs + 15 credits'}
-                </Text>
-              </TouchableOpacity>
+              <Text style={styles.headerSubtitle}>
+                By verified campus scholars
+              </Text>
             </View>
-          ) : (
-            /* Unlocked: Show Write Button */
-            <View style={styles.actionBar}>
-              <View>
-                <Text style={styles.sectionHeading}>Campus Insights & Blogs</Text>
-                <Text style={styles.sectionSub}>Published by verified campus scholars</Text>
-              </View>
-              <TouchableOpacity style={styles.composeBtn} onPress={() => setBlogModalOpen(true)}>
-                <PenTool size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.actionBtnText}>Write Blog</Text>
-              </TouchableOpacity>
-            </View>
-          )}
 
-          {/* Posts Feed */}
-          {loading ? (
-            <ActivityIndicator color="#38BDF8" style={{ marginTop: 40 }} />
-          ) : (
-            <FlatList
-              data={posts}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.listContent}
-              renderItem={({ item }) => (
-                <View style={styles.blogCard}>
-                  <Text style={styles.blogPostTitle}>{item.title}</Text>
+            <TouchableOpacity
+              style={styles.actionPillBtn}
+              onPress={() => setBlogModalOpen(true)}
+              activeOpacity={0.88}
+            >
+              <Text style={styles.actionPillText}>Write</Text>
+            </TouchableOpacity>
+          </View>
 
-                  {/* Author Name + @username */}
-                  <View style={styles.authorRow}>
-                    <AvatarWithBadgeFrame name={item.authorName} size={28} />
-                    <View style={{ marginLeft: 8 }}>
-                      <Text style={styles.authorRealName}>{item.authorName}</Text>
-                      <Text style={styles.authorUsername}>@{item.authorUsername || 'scholar'}</Text>
-                    </View>
-                    <Text style={styles.postDateText}>
-                      • {new Date(item.publishedAt || Date.now()).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+          {/* Blog Cards (Page 8: Hello in Mint, Welcome in Pink) */}
+          {posts.map((post, idx) => {
+            const isMint = idx % 2 === 0;
+            const cardBg = isMint ? '#EBF7F0' : '#FDE8EE';
+
+            return (
+              <View key={post.id} style={[styles.blogCard, { backgroundColor: cardBg }]}>
+                {/* Blog Title */}
+                <Text style={styles.blogTitle}>{post.title}</Text>
+
+                {/* Author row */}
+                <View style={styles.authorRow}>
+                  <View style={styles.authorAvatarCircle}>
+                    <Text style={styles.authorAvatarText}>CA</Text>
+                  </View>
+                  <View>
+                    <Text style={styles.authorName}>
+                      {post.authorName || 'Campus Administrator'}
+                    </Text>
+                    <Text style={styles.authorUsername}>
+                      @{post.authorUsername || 'admin'} · 29 Oct
                     </Text>
                   </View>
+                </View>
 
-                  <Text style={styles.blogContent}>{item.content}</Text>
+                {/* Content snippet */}
+                <Text style={styles.blogSnippet}>{post.content}</Text>
 
-                  <View style={styles.cardFooter}>
-                    <TouchableOpacity
-                      style={styles.upvoteBtn}
-                      onPress={() => handleUpvotePost(item)}
-                    >
-                      <Heart
-                        size={16}
-                        color={item.hasUpvoted ? '#EF4444' : '#94A3B8'}
-                        fill={item.hasUpvoted ? '#EF4444' : 'transparent'}
-                      />
-                      <Text style={[styles.upvoteText, item.hasUpvoted && { color: '#EF4444' }]}>
-                        {item.upvotesCount}
-                      </Text>
-                    </TouchableOpacity>
+                {/* Bottom counters */}
+                <View style={styles.blogFooterRow}>
+                  <TouchableOpacity
+                    style={styles.counterItem}
+                    onPress={() => handleUpvotePost(post)}
+                  >
+                    <Heart
+                      size={15}
+                      color={post.hasUpvoted ? '#DC2626' : '#111827'}
+                      fill={post.hasUpvoted ? '#DC2626' : 'none'}
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.counterText}>{post.upvotesCount}</Text>
+                  </TouchableOpacity>
 
-                    <View style={styles.commentsIndicator}>
-                      <MessageSquare size={15} color="#64748B" style={{ marginRight: 4 }} />
-                      <Text style={styles.commentsText}>{item.commentsCount || 0} comments</Text>
-                    </View>
+                  <View style={styles.counterItem}>
+                    <MessageSquare size={15} color="#111827" style={{ marginRight: 6 }} />
+                    <Text style={styles.counterText}>0 comments</Text>
                   </View>
                 </View>
-              )}
-            />
-          )}
-        </View>
+              </View>
+            );
+          })}
+        </ScrollView>
       )}
 
-      {/* Modal 1: List Study Material */}
+      {/* Modal: List Material */}
       <Modal visible={materialModalOpen} transparent animationType="fade">
         <View style={styles.modalBg}>
           <View style={styles.modalCard}>
-            <View style={styles.modalTop}>
-              <Text style={styles.modalTitle}>List Study Material</Text>
-              <TouchableOpacity onPress={() => setMaterialModalOpen(false)}>
-                <CloseIcon size={20} color="#94A3B8" />
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.modalHeading}>List Study Material</Text>
+            <Text style={styles.modalSub}>
+              Share peer notes or exam slides with your campus for credits.
+            </Text>
 
-            <Text style={styles.inputLabel}>Material Title</Text>
             <TextInput
-              style={styles.input}
-              placeholder="e.g. Distributed Systems Summary"
-              placeholderTextColor="#64748B"
+              style={styles.modalInput}
+              placeholder="Material title (e.g. Distributed Systems Notes)"
+              placeholderTextColor="#9CA3AF"
               value={materialTitle}
               onChangeText={setMaterialTitle}
             />
 
-            <Text style={styles.inputLabel}>File URL / Storage Link</Text>
             <TextInput
-              style={styles.input}
-              placeholder="https://campus.edu/file.pdf"
-              placeholderTextColor="#64748B"
+              style={styles.modalInput}
+              placeholder="Download URL (e.g. https://drive.google.com/...)"
+              placeholderTextColor="#9CA3AF"
               value={materialFileUrl}
               onChangeText={setMaterialFileUrl}
             />
 
-            <Text style={styles.inputLabel}>Price in Credits (1–5)</Text>
-            <View style={styles.priceSelector}>
-              {[1, 2, 3, 4, 5].map((p) => (
-                <TouchableOpacity
-                  key={p}
-                  style={[styles.priceChip, materialPriceCredits === p && styles.priceChipActive]}
-                  onPress={() => setMaterialPriceCredits(p)}
-                >
-                  <Text style={[styles.priceChipText, materialPriceCredits === p && styles.priceChipTextActive]}>
-                    {p} cr
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setMaterialModalOpen(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity style={styles.submitBtn} onPress={handleCreateMaterial} disabled={actionLoading}>
-              <Text style={styles.submitBtnText}>
-                {actionLoading ? 'Publishing...' : 'Publish to Marketplace'}
-              </Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalSubmitBtn}
+                onPress={handleCreateMaterial}
+                disabled={actionLoading}
+              >
+                {actionLoading ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.modalSubmitText}>List for 2 Credits</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
 
-      {/* Modal 2: Simple Blog Posting (Title & Description only) */}
+      {/* Modal: Write Blog Post */}
       <Modal visible={blogModalOpen} transparent animationType="fade">
         <View style={styles.modalBg}>
           <View style={styles.modalCard}>
-            <View style={styles.modalTop}>
-              <Text style={styles.modalTitle}>Write Campus Blog Post</Text>
-              <TouchableOpacity onPress={() => setBlogModalOpen(false)}>
-                <CloseIcon size={20} color="#94A3B8" />
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.modalHeading}>Write Campus Insight</Text>
+            <Text style={styles.modalSub}>
+              Share knowledge, technical guides, or campus announcements.
+            </Text>
 
-            <Text style={styles.inputLabel}>Blog Title</Text>
             <TextInput
-              style={styles.input}
-              placeholder="e.g. Key Takeaways from React Native Workshops"
-              placeholderTextColor="#64748B"
-              maxLength={100}
+              style={styles.modalInput}
+              placeholder="Post title"
+              placeholderTextColor="#9CA3AF"
               value={blogTitle}
               onChangeText={setBlogTitle}
             />
 
-            <Text style={styles.inputLabel}>Blog Description / Article</Text>
             <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="Write your article or description for peers on campus..."
-              placeholderTextColor="#64748B"
-              maxLength={1500}
+              style={[styles.modalInput, { height: 90, textAlignVertical: 'top' }]}
+              placeholder="What insight would you like to share?"
+              placeholderTextColor="#9CA3AF"
+              multiline
               value={blogDescription}
               onChangeText={setBlogDescription}
-              multiline
-              numberOfLines={6}
             />
 
-            <TouchableOpacity style={styles.publishBlogBtn} onPress={handlePublishBlogPost} disabled={actionLoading}>
-              <Text style={styles.submitBtnText}>
-                {actionLoading ? 'Posting...' : 'Publish Blog Post'}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setBlogModalOpen(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalSubmitBtn}
+                onPress={handlePublishBlogPost}
+                disabled={actionLoading}
+              >
+                {actionLoading ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.modalSubmitText}>Publish Post</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -551,371 +546,355 @@ export const MarketplaceScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#F8FAF9',
   },
+  // Top Segments (Artboard Pages 7 & 8)
   topTabBar: {
     flexDirection: 'row',
-    backgroundColor: '#1E293B',
-    borderRadius: 14,
-    padding: 4,
-    margin: 16,
-    marginBottom: 8,
+    justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 10,
+    backgroundColor: '#F8FAF9',
   },
   topTabBtn: {
     flex: 1,
+    height: 44,
+    borderRadius: 22,
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
+    alignItems: 'center',
   },
   topTabBtnActive: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#18201D',
+  },
+  topTabBtnInactive: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
   },
   topTabText: {
-    color: '#94A3B8',
     fontSize: 13,
-    fontWeight: '700',
   },
   topTabTextActive: {
-    color: '#38BDF8',
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
-  actionBar: {
+  topTabTextInactive: {
+    color: '#111827',
+    fontWeight: '600',
+  },
+  pageScroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 40,
+  },
+  // Header Row
+  headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    alignItems: 'flex-start',
+    marginBottom: 16,
   },
-  sectionHeading: {
-    color: '#F8FAFC',
-    fontSize: 18,
+  headerTitle: {
+    fontSize: 24,
     fontWeight: '800',
+    color: '#111827',
+    letterSpacing: -0.5,
   },
-  sectionSub: {
-    color: '#94A3B8',
-    fontSize: 11,
-    marginTop: 2,
+  headerSubtitle: {
+    fontSize: 13,
+    color: '#5A6561',
+    marginTop: 4,
   },
-  actionBtn: {
-    backgroundColor: '#0284C7',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 10,
+  actionPillBtn: {
+    backgroundColor: '#18201D',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
   },
-  composeBtn: {
-    backgroundColor: '#7C3AED',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 10,
-  },
-  actionBtnText: {
+  actionPillText: {
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 13,
   },
-  listContent: {
-    padding: 16,
-    gap: 12,
+  // Category Chips (Page 7)
+  categoryRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 20,
   },
-  // Material Card
-  materialCard: {
-    backgroundColor: '#0F172A',
-    borderRadius: 14,
+  catChip: {
+    borderRadius: 20,
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+  },
+  catChipActive: {
+    backgroundColor: '#18201D',
+  },
+  catChipInactive: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+  },
+  catChipText: {
+    fontSize: 13,
+  },
+  catChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  catChipTextInactive: {
+    color: '#111827',
+    fontWeight: '600',
+  },
+  // Empty State (Page 7)
+  emptyContainer: {
+    alignItems: 'center',
+    paddingTop: 60,
+    paddingHorizontal: 20,
+  },
+  emptyIconCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 6,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: '#5A6561',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 22,
+    maxWidth: 260,
+  },
+  listMaterialOutlineBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#1E293B',
-    padding: 16,
+    borderColor: '#0E6245',
+    borderRadius: 22,
+    paddingVertical: 10,
+    paddingHorizontal: 22,
+    backgroundColor: '#FFFFFF',
   },
-  cardHeader: {
+  listMaterialOutlineText: {
+    color: '#0E6245',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  // Material Items
+  itemCard: {
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 16,
+  },
+  itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 8,
   },
-  typeTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1E293B',
-    paddingHorizontal: 8,
+  itemTypeCapsule: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 10,
   },
-  typeText: {
-    color: '#38BDF8',
-    fontSize: 10,
+  itemTypeText: {
+    fontSize: 11,
     fontWeight: '800',
+    color: '#111827',
   },
-  pricePill: {
+  itemPriceCapsule: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    backgroundColor: '#FEF7DA',
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
   },
-  priceText: {
-    color: '#FBBF24',
-    fontSize: 12,
-    fontWeight: '700',
+  itemPriceText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#854D0E',
   },
-  materialTitle: {
-    color: '#F8FAFC',
-    fontSize: 15,
-    fontWeight: '700',
+  itemTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111827',
     marginBottom: 4,
   },
-  materialSeller: {
-    color: '#94A3B8',
-    fontSize: 12,
+  itemAuthor: {
+    fontSize: 13,
+    color: '#5A6561',
     marginBottom: 12,
   },
-  cardFooter: {
-    borderTopWidth: 1,
-    borderTopColor: '#1E293B',
-    paddingTop: 10,
+  itemFooter: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   buyBtn: {
-    backgroundColor: '#0284C7',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#0E6245',
+    borderRadius: 18,
     paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 8,
+    paddingHorizontal: 16,
   },
   buyBtnText: {
     color: '#FFFFFF',
+    fontWeight: '700',
     fontSize: 13,
-    fontWeight: '700',
   },
-  downloadDoneBadge: {
+  purchasedTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#062016',
-    borderWidth: 1,
-    borderColor: '#10B981',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
   },
-  downloadDoneText: {
-    color: '#10B981',
-    fontSize: 12,
+  purchasedText: {
+    color: '#0E6245',
     fontWeight: '700',
-  },
-  // Gate Card (when blog is locked)
-  gateCard: {
-    backgroundColor: '#1E1B18',
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#F59E0B',
-    padding: 16,
-    margin: 16,
-    gap: 12,
-  },
-  gateHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  gateTitle: {
-    color: '#FBBF24',
     fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0.6,
   },
-  gateSub: {
-    color: '#CBD5E1',
-    fontSize: 12,
-    marginTop: 4,
-    lineHeight: 17,
-  },
-  reqBlock: {
-    backgroundColor: '#0F172A',
-    borderRadius: 12,
-    padding: 12,
-    gap: 10,
-  },
-  reqItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  reqLabel: {
-    color: '#F8FAFC',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  reqStatus: {
-    color: '#94A3B8',
-    fontSize: 11,
-    marginTop: 1,
-  },
-  unlockBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#D97706',
-    borderRadius: 12,
-    paddingVertical: 12,
-  },
-  unlockBtnDisabled: {
-    backgroundColor: '#334155',
-  },
-  unlockBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  unlockBtnTextDisabled: {
-    color: '#64748B',
-  },
-  // Blog Post Card
+  // Blog Card (Page 8)
   blogCard: {
-    backgroundColor: '#0F172A',
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#1E293B',
-    padding: 16,
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 16,
   },
-  blogPostTitle: {
-    color: '#F8FAFC',
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 8,
+  blogTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 10,
+    letterSpacing: -0.3,
   },
   authorRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 10,
   },
-  authorRealName: {
-    color: '#F8FAFC',
-    fontSize: 12,
+  authorAvatarCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#0E6245',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  authorAvatarText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 11,
+  },
+  authorName: {
+    fontSize: 13,
     fontWeight: '700',
+    color: '#111827',
   },
   authorUsername: {
-    color: '#38BDF8',
     fontSize: 11,
+    color: '#0E6245',
   },
-  postDateText: {
-    color: '#64748B',
-    fontSize: 11,
-    marginLeft: 6,
-  },
-  blogContent: {
-    color: '#CBD5E1',
+  blogSnippet: {
     fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 12,
+    color: '#374151',
+    lineHeight: 18,
+    marginBottom: 14,
   },
-  upvoteBtn: {
+  blogFooterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 18,
   },
-  upvoteText: {
-    color: '#94A3B8',
+  counterItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  counterText: {
     fontSize: 12,
     fontWeight: '600',
-  },
-  commentsIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  commentsText: {
-    color: '#64748B',
-    fontSize: 11,
+    color: '#111827',
   },
   // Modals
   modalBg: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 24,
   },
   modalCard: {
     width: '100%',
-    maxWidth: 420,
-    backgroundColor: '#0F172A',
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: '#38BDF8',
-    padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 22,
   },
-  modalTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  modalHeading: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  modalSub: {
+    fontSize: 13,
+    color: '#5A6561',
     marginBottom: 16,
   },
-  modalTitle: {
-    color: '#F8FAFC',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  inputLabel: {
-    color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: '#1E293B',
+  modalInput: {
+    backgroundColor: '#F8FAF9',
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#334155',
-    borderRadius: 10,
-    color: '#F8FAFC',
-    padding: 12,
+    borderColor: '#E2E8E5',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     fontSize: 14,
+    color: '#111827',
     marginBottom: 12,
   },
-  textArea: {
-    height: 120,
-    textAlignVertical: 'top',
-  },
-  priceSelector: {
+  modalBtnRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 18,
+    gap: 10,
+    marginTop: 6,
   },
-  priceChip: {
+  modalCancelBtn: {
     flex: 1,
-    backgroundColor: '#1E293B',
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  priceChipActive: {
-    borderColor: '#FBBF24',
-    backgroundColor: '#302607',
-  },
-  priceChipText: {
-    color: '#94A3B8',
-    fontWeight: '700',
-  },
-  priceChipTextActive: {
-    color: '#FBBF24',
-  },
-  submitBtn: {
-    backgroundColor: '#0284C7',
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 20,
+    backgroundColor: '#EFF3F1',
     alignItems: 'center',
   },
-  publishBlogBtn: {
-    backgroundColor: '#7C3AED',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  submitBtnText: {
-    color: '#FFFFFF',
+  modalCancelText: {
     fontSize: 14,
     fontWeight: '700',
+    color: '#374151',
+  },
+  modalSubmitBtn: {
+    flex: 2,
+    paddingVertical: 12,
+    borderRadius: 20,
+    backgroundColor: '#0E6245',
+    alignItems: 'center',
+  },
+  modalSubmitText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

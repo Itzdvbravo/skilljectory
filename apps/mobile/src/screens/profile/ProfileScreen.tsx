@@ -51,11 +51,11 @@ import {
   Tag,
   Star,
   MapPin,
-  Globe,
   LogOut,
 } from 'lucide-react-native';
-import { AvatarWithBadgeFrame, useAppTheme } from '../../components/common/ThemeSystem';
+import { AvatarWithBadgeFrame, BrandUnderline, useAppTheme } from '../../components/common/ThemeSystem';
 import { SocialLinksEditor } from '../../components/profile/SocialLinksEditor';
+import { saveOrSharePng } from '../../services/exportImage';
 
 // Resume Style Palettes & Customization Types
 export type ResumeThemeKey = 'cyan' | 'gold' | 'emerald' | 'indigo';
@@ -154,7 +154,7 @@ export interface GenerateResumeOptions {
 }
 
 // Helper to generate and download a genuine verified academic resume PNG
-export function generateResumePng(options: GenerateResumeOptions) {
+export async function generateResumePng(options: GenerateResumeOptions): Promise<string | null> {
   const theme = RESUME_THEMES[options.theme || 'cyan'];
   const showBio = options.showBio !== false;
   const showStats = options.showStats !== false;
@@ -162,10 +162,41 @@ export function generateResumePng(options: GenerateResumeOptions) {
   const showSkills = options.showSkills !== false;
   const showBadges = options.showBadges !== false;
 
+  // 1. Primary: High-fidelity vector SVG-to-PNG backend rasterizer (Sharp)
+  try {
+    const res = await api.exportResumePng({
+      name: options.name,
+      username: options.username,
+      studentId: options.studentId,
+      bio: options.bio,
+      hours: options.hours,
+      sessions: options.sessions,
+      rating: options.rating,
+      credits: (options as any).credits || 12,
+      skills: options.skills,
+      badges: options.badges,
+      theme: options.theme || 'cyan',
+      showBio,
+      showStats,
+      showRating,
+      showSkills,
+      showBadges,
+    });
+
+    if (res?.success && res?.pngBase64) {
+      const fileName = res.fileName || `SkillJectory_Resume_${options.username || 'scholar'}.png`;
+      await saveOrSharePng(res.pngBase64, fileName, 'Save Academic Resume (.png)');
+      return res.pngBase64;
+    }
+  } catch (apiErr: any) {
+    console.warn('[ExportResume] Server rasterizer error:', apiErr?.message);
+  }
+
+  // 2. Client-side canvas fallback if running in a browser environment
   if (typeof document === 'undefined') {
     Alert.alert(
-      'Resume Generated',
-      `Academic Resume for ${options.name} (@${options.username})\nTheme: ${theme.label}\nTeaching Hours: ${options.hours} hrs\nVerified Sessions: ${options.sessions}`
+      'Export Notice',
+      'Could not generate resume PNG. Please check your network connection to the server.'
     );
     return null;
   }
@@ -406,16 +437,13 @@ export function generateResumePng(options: GenerateResumeOptions) {
       footerY + 98
     );
 
-    // Generate genuine PNG and trigger browser download
+    // Generate genuine PNG and trigger download/share
     const dataUrl = canvas.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = `SkillJectory_Resume_${options.username || 'scholar'}.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    Alert.alert('Resume Exported!', `Downloaded SkillJectory_Resume_${options.username}.png`);
+    await saveOrSharePng(
+      dataUrl,
+      `SkillJectory_Resume_${options.username || 'scholar'}.png`,
+      'Save Academic Resume (.png)'
+    );
     return dataUrl;
   } catch (err: any) {
     Alert.alert('Export Error', err.message || 'Could not export resume image');
@@ -640,25 +668,27 @@ export const ProfileScreen = ({ navigation }: any) => {
         />
       }
     >
-      {/* Top Header Navigation: Public View vs Settings Tabs */}
+      {/* Top Header Navigation: Public View vs Settings Tabs (Artboard Page 9 & 11) */}
       <View style={styles.topTabBar}>
         <TouchableOpacity
-          style={[styles.topTabBtn, activeMainTab === 'public_view' && styles.topTabBtnActive]}
+          style={[styles.topTabBtn, activeMainTab === 'public_view' ? styles.topTabBtnActive : styles.topTabBtnInactive]}
           onPress={() => setActiveMainTab('public_view')}
+          activeOpacity={0.8}
         >
-          <User size={15} color={activeMainTab === 'public_view' ? '#38BDF8' : '#94A3B8'} style={{ marginRight: 6 }} />
-          <Text style={[styles.topTabText, activeMainTab === 'public_view' && styles.topTabTextActive]}>
-            Public Profile
+          <User size={15} color={activeMainTab === 'public_view' ? '#FFFFFF' : '#111827'} style={{ marginRight: 6 }} />
+          <Text style={[styles.topTabText, activeMainTab === 'public_view' ? styles.topTabTextActive : styles.topTabTextInactive]}>
+            Public
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.topTabBtn, activeMainTab === 'settings' && styles.topTabBtnActive]}
+          style={[styles.topTabBtn, activeMainTab === 'settings' ? styles.topTabBtnActive : styles.topTabBtnInactive]}
           onPress={() => setActiveMainTab('settings')}
+          activeOpacity={0.8}
         >
-          <Settings size={15} color={activeMainTab === 'settings' ? '#38BDF8' : '#94A3B8'} style={{ marginRight: 6 }} />
-          <Text style={[styles.topTabText, activeMainTab === 'settings' && styles.topTabTextActive]}>
-            Settings & Wallet
+          <Settings size={15} color={activeMainTab === 'settings' ? '#FFFFFF' : '#111827'} style={{ marginRight: 6 }} />
+          <Text style={[styles.topTabText, activeMainTab === 'settings' ? styles.topTabTextActive : styles.topTabTextInactive]}>
+            Settings
           </Text>
         </TouchableOpacity>
 
@@ -672,7 +702,7 @@ export const ProfileScreen = ({ navigation }: any) => {
           }}
           activeOpacity={0.8}
         >
-          <LogOut size={13} color="#EF4444" style={{ marginRight: 4 }} />
+          <LogOut size={13} color="#DC2626" style={{ marginRight: 4 }} />
           <Text style={styles.logoutPillText}>Exit</Text>
         </TouchableOpacity>
       </View>
@@ -845,80 +875,120 @@ export const ProfileScreen = ({ navigation }: any) => {
       ========================================================================= */}
       {activeMainTab === 'settings' && (
         <View style={styles.settingsViewContainer}>
-          {/* Sub-Tabs: Wallet, Customization, History, Export Resume */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subTabBar}>
+          {/* Header Title with Signature Curved BrandUnderline (Artboard Pages 11 - 15) */}
+          <View style={styles.settingsTitleRow}>
+            {settingsSubTab === 'wallet' && (
+              <View style={styles.titleWithUnderline}>
+                <Text style={styles.settingsHeaderTitle}>Wallet & </Text>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={styles.settingsHeaderTitle}>credits</Text>
+                  <BrandUnderline width={68} style={{ marginTop: 2 }} />
+                </View>
+              </View>
+            )}
+            {settingsSubTab === 'customization' && (
+              <View style={styles.titleWithUnderline}>
+                <Text style={styles.settingsHeaderTitle}>Customize </Text>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={styles.settingsHeaderTitle}>profile</Text>
+                  <BrandUnderline width={68} style={{ marginTop: 2 }} />
+                </View>
+              </View>
+            )}
+            {settingsSubTab === 'history' && (
+              <View style={styles.titleWithUnderline}>
+                <Text style={styles.settingsHeaderTitle}>Session </Text>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={styles.settingsHeaderTitle}>history</Text>
+                  <BrandUnderline width={68} style={{ marginTop: 2 }} />
+                </View>
+              </View>
+            )}
+            {settingsSubTab === 'resume' && (
+              <View style={styles.titleWithUnderline}>
+                <Text style={styles.settingsHeaderTitle}>Export </Text>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={styles.settingsHeaderTitle}>resume</Text>
+                  <BrandUnderline width={68} style={{ marginTop: 2 }} />
+                </View>
+              </View>
+            )}
+          </View>
+
+          {/* Sub-Tabs: Wallet, Customize, History, Resume (Artboard Pages 11 - 15) */}
+          <View style={styles.subTabBarRow}>
             <TouchableOpacity
-              style={[styles.subTabPill, settingsSubTab === 'wallet' && styles.subTabPillActive]}
+              style={[styles.subTabPill, settingsSubTab === 'wallet' ? styles.subTabPillActive : styles.subTabPillInactive]}
               onPress={() => setSettingsSubTab('wallet')}
+              activeOpacity={0.8}
             >
-              <Coins size={14} color={settingsSubTab === 'wallet' ? '#FFFFFF' : '#94A3B8'} style={{ marginRight: 4 }} />
-              <Text style={[styles.subTabPillText, settingsSubTab === 'wallet' && styles.subTabPillTextActive]}>
-                Wallet & Credits
+              <Text style={[styles.subTabPillText, settingsSubTab === 'wallet' ? styles.subTabPillTextActive : styles.subTabPillTextInactive]}>
+                Wallet
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.subTabPill, settingsSubTab === 'customization' && styles.subTabPillActive]}
+              style={[styles.subTabPill, settingsSubTab === 'customization' ? styles.subTabPillActive : styles.subTabPillInactive]}
               onPress={() => setSettingsSubTab('customization')}
+              activeOpacity={0.8}
             >
-              <Palette size={14} color={settingsSubTab === 'customization' ? '#FFFFFF' : '#94A3B8'} style={{ marginRight: 4 }} />
-              <Text style={[styles.subTabPillText, settingsSubTab === 'customization' && styles.subTabPillTextActive]}>
-                Customize Profile
+              <Text style={[styles.subTabPillText, settingsSubTab === 'customization' ? styles.subTabPillTextActive : styles.subTabPillTextInactive]}>
+                Customize
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.subTabPill, settingsSubTab === 'history' && styles.subTabPillActive]}
+              style={[styles.subTabPill, settingsSubTab === 'history' ? styles.subTabPillActive : styles.subTabPillInactive]}
               onPress={() => setSettingsSubTab('history')}
+              activeOpacity={0.8}
             >
-              <Clock size={14} color={settingsSubTab === 'history' ? '#FFFFFF' : '#94A3B8'} style={{ marginRight: 4 }} />
-              <Text style={[styles.subTabPillText, settingsSubTab === 'history' && styles.subTabPillTextActive]}>
-                Session History
+              <Text style={[styles.subTabPillText, settingsSubTab === 'history' ? styles.subTabPillTextActive : styles.subTabPillTextInactive]}>
+                History
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.subTabPill, settingsSubTab === 'resume' && styles.subTabPillActive]}
+              style={[styles.subTabPill, settingsSubTab === 'resume' ? styles.subTabPillActive : styles.subTabPillInactive]}
               onPress={() => setSettingsSubTab('resume')}
+              activeOpacity={0.8}
             >
-              <FileText size={14} color={settingsSubTab === 'resume' ? '#FFFFFF' : '#94A3B8'} style={{ marginRight: 4 }} />
-              <Text style={[styles.subTabPillText, settingsSubTab === 'resume' && styles.subTabPillTextActive]}>
-                Export Resume (.png)
+              <Text style={[styles.subTabPillText, settingsSubTab === 'resume' ? styles.subTabPillTextActive : styles.subTabPillTextInactive]}>
+                Resume
               </Text>
             </TouchableOpacity>
-          </ScrollView>
+          </View>
 
-          {/* SUB-TAB 1: WALLET & CREDITS */}
+          {/* SUB-TAB 1: WALLET & CREDITS (Artboard Page 11) */}
           {settingsSubTab === 'wallet' && (
             <View style={styles.walletSection}>
-              <View style={styles.balanceCard}>
-                <Text style={styles.balanceSub}>Current Available Time-Credits</Text>
+              {/* Lavender Balance Hero Card */}
+              <View style={styles.balanceCardLavender}>
+                <Text style={styles.balanceSubMuted}>Available time-credits</Text>
                 <View style={styles.balanceMainRow}>
                   <Text style={styles.balanceDigits}>{currentBalance.toFixed(1)}</Text>
                   <Text style={styles.balanceUnits}> CREDITS</Text>
                 </View>
 
-                <View style={styles.balanceMetaRow}>
-                  <View style={styles.metaBadge}>
-                    <Calendar size={12} color="#38BDF8" style={{ marginRight: 4 }} />
-                    <Text style={styles.metaBadgeText}>Monthly Refill: +2.0 cr</Text>
+                <View style={styles.balanceWhitePillRow}>
+                  <View style={styles.monthlyRefillPill}>
+                    <Calendar size={13} color="#111827" style={{ marginRight: 5 }} />
+                    <Text style={styles.refillPillText}>Monthly refill: +2.0 cr</Text>
                   </View>
-                  <Text style={styles.rateHintText}>1 Credit = 1 Hour Peer Learning</Text>
+                  <Text style={styles.rateHintText}>1 credit = 1 hour</Text>
                 </View>
               </View>
 
-              {/* Transaction Ledger History */}
+              {/* Transaction History Section */}
               <View style={styles.ledgerHeaderRow}>
-                <Text style={styles.ledgerTitle}>TRANSACTION LEDGER HISTORY</Text>
+                <Text style={styles.ledgerTitle}>TRANSACTION HISTORY</Text>
                 {ledger.length > 3 && (
                   <TouchableOpacity
                     onPress={() => setShowAllLedger(!showAllLedger)}
                     style={styles.toggleLedgerBtn}
                   >
                     <Text style={styles.toggleLedgerText}>
-                      {showAllLedger ? 'Show Less' : `View All (${ledger.length})`}
+                      {showAllLedger ? 'Show Less' : `View all (${ledger.length}) >`}
                     </Text>
-                    {showAllLedger ? <ChevronUp size={14} color="#38BDF8" /> : <ChevronDown size={14} color="#38BDF8" />}
                   </TouchableOpacity>
                 )}
               </View>
@@ -931,9 +1001,9 @@ export const ProfileScreen = ({ navigation }: any) => {
                 });
 
                 return (
-                  <View key={item.id} style={styles.ledgerItem}>
-                    <View style={[styles.txIconBox, isEarn ? styles.txEarn : styles.txSpend]}>
-                      {isEarn ? <ArrowDownLeft size={16} color="#10B981" /> : <ArrowUpRight size={16} color="#EF4444" />}
+                  <View key={item.id} style={styles.transactionCardMint}>
+                    <View style={[styles.txIconCircle, isEarn ? styles.txEarnCircle : styles.txSpendCircle]}>
+                      {isEarn ? <ArrowDownLeft size={16} color="#0E6245" /> : <ArrowUpRight size={16} color="#DC2626" />}
                     </View>
 
                     <View style={styles.txInfo}>
@@ -1522,32 +1592,49 @@ export const ProfileScreen = ({ navigation }: any) => {
 
               {/* 4. Action Button: Generates and downloads genuine PNG file with active options */}
               <TouchableOpacity
-                style={[styles.exportPngBtn, { backgroundColor: RESUME_THEMES[resumeTheme].primary }]}
-                onPress={() => {
-                  generateResumePng({
-                    name: profileData?.name || user?.name || 'Alex Rivera',
-                    username: username,
-                    studentId: profileData?.studentId || user?.studentId || 'CS-2024-889',
-                    department: 'Computer Science & Engineering',
-                    bio:
-                      profileData?.bio ||
-                      'Campus peer mentor specializing in React Native, mobile performance, and distributed systems. 20+ hours peer teaching.',
-                    hours: profileData?.totalSessionHours || 18.5,
-                    sessions: sessionsCount,
-                    rating: 4.9,
-                    skills: ['React Native', 'Data Structures', 'PostgreSQL', 'UI/UX Design', 'System Architecture'],
-                    badges: profileData?.badges?.map((b) => b.name) || ['Mentor Level 2 — Dedicated Scholar', 'Fast Learner'],
-                    theme: resumeTheme,
-                    showBio: resumeShowBio,
-                    showStats: resumeShowStats,
-                    showRating: resumeShowRating,
-                    showSkills: resumeShowSkills,
-                    showBadges: resumeShowBadges,
-                  });
+                style={[
+                  styles.exportPngBtn,
+                  { backgroundColor: RESUME_THEMES[resumeTheme].primary, opacity: actionLoading ? 0.7 : 1 },
+                ]}
+                disabled={actionLoading}
+                onPress={async () => {
+                  try {
+                    setActionLoading(true);
+                    await generateResumePng({
+                      name: profileData?.name || user?.name || 'Alex Rivera',
+                      username: username,
+                      studentId: profileData?.studentId || user?.studentId || 'CS-2024-889',
+                      department: 'Computer Science & Engineering',
+                      bio:
+                        profileData?.bio ||
+                        'Campus peer mentor specializing in React Native, mobile performance, and distributed systems. 20+ hours peer teaching.',
+                      hours: profileData?.totalSessionHours || 18.5,
+                      sessions: sessionsCount,
+                      rating: 4.9,
+                      skills: ['React Native', 'Data Structures', 'PostgreSQL', 'UI/UX Design', 'System Architecture'],
+                      badges: profileData?.badges?.map((b) => b.name) || ['Mentor Level 2 — Dedicated Scholar', 'Fast Learner'],
+                      theme: resumeTheme,
+                      showBio: resumeShowBio,
+                      showStats: resumeShowStats,
+                      showRating: resumeShowRating,
+                      showSkills: resumeShowSkills,
+                      showBadges: resumeShowBadges,
+                    });
+                  } catch (err: any) {
+                    Alert.alert('Notice', err.message || 'Could not export resume PNG');
+                  } finally {
+                    setActionLoading(false);
+                  }
                 }}
               >
-                <Download size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-                <Text style={styles.exportPngBtnText}>Download Styled Resume as PNG Image</Text>
+                {actionLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
+                ) : (
+                  <Download size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                )}
+                <Text style={styles.exportPngBtnText}>
+                  {actionLoading ? 'Generating High-Res PNG...' : 'Download Styled Resume as PNG Image'}
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -1560,88 +1647,90 @@ export const ProfileScreen = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#F8FAF9',
   },
   content: {
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingTop: 12,
     paddingBottom: 40,
   },
-  // Top Tabs
+  // Top Tabs (Artboard Page 9)
   topTabBar: {
     flexDirection: 'row',
-    backgroundColor: '#1E293B',
-    borderRadius: 14,
-    padding: 4,
+    gap: 10,
     marginBottom: 16,
   },
   topTabBtn: {
     flex: 1,
+    height: 42,
+    borderRadius: 21,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
   },
   topTabBtnActive: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#18201D',
+  },
+  topTabBtnInactive: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
   },
   topTabText: {
-    color: '#94A3B8',
     fontSize: 13,
-    fontWeight: '700',
   },
   topTabTextActive: {
-    color: '#38BDF8',
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  topTabTextInactive: {
+    color: '#111827',
+    fontWeight: '600',
   },
   logoutPill: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    height: 42,
+    paddingHorizontal: 16,
+    borderRadius: 21,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.25)',
-    marginLeft: 4,
+    borderColor: '#FCA5A5',
   },
   logoutPillText: {
-    color: '#EF4444',
-    fontSize: 12,
+    color: '#DC2626',
+    fontSize: 13,
     fontWeight: '700',
   },
-  // Public Profile View
+  // Public Profile View (Page 9)
   publicViewContainer: {
     gap: 16,
   },
   profileHeroCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8E5',
   },
   coverBanner: {
-    backgroundColor: '#0284C7',
-    padding: 14,
-    paddingBottom: 28,
+    backgroundColor: '#0E6245',
+    padding: 16,
+    paddingBottom: 32,
   },
   universityBadge: {
-    backgroundColor: 'rgba(0,0,0,0.25)',
     alignSelf: 'flex-start',
-    borderRadius: 6,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
     marginBottom: 4,
   },
   universityBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
+    color: '#FEF3C7',
+    fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 0.6,
+    letterSpacing: 0.8,
   },
   departmentBadgeText: {
-    color: '#E0F2FE',
+    color: '#D1FAE5',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -1662,22 +1751,24 @@ const styles = StyleSheet.create({
   heroShareBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0F172A',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#38BDF8',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderWidth: 1.5,
+    borderColor: '#0E6245',
   },
   heroShareBtnText: {
-    color: '#38BDF8',
+    color: '#0E6245',
     fontSize: 12,
     fontWeight: '700',
   },
   heroSettingsBtn: {
-    backgroundColor: '#334155',
-    borderRadius: 10,
-    padding: 9,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1691,37 +1782,38 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   heroRealName: {
-    color: '#F8FAFC',
+    color: '#111827',
     fontSize: 22,
     fontWeight: '800',
   },
   verifiedPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: 6,
+    gap: 4,
+    backgroundColor: '#EBF7F0',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 12,
   },
   verifiedText: {
-    color: '#10B981',
-    fontSize: 10,
+    color: '#0E6245',
+    fontSize: 11,
     fontWeight: '700',
   },
   heroUsername: {
-    color: '#38BDF8',
+    color: '#0E6245',
     fontSize: 14,
     fontWeight: '700',
     marginTop: 2,
   },
   heroStudentId: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 12,
     marginTop: 4,
+    fontWeight: '500',
   },
   heroBio: {
-    color: '#CBD5E1',
+    color: '#374151',
     fontSize: 13,
     lineHeight: 19,
     paddingHorizontal: 16,
@@ -1730,36 +1822,38 @@ const styles = StyleSheet.create({
   statsStrip: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: '#0F172A',
-    borderRadius: 14,
+    backgroundColor: '#F8FAF9',
+    borderRadius: 18,
     padding: 12,
     marginHorizontal: 16,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
   },
   statBox: {
     alignItems: 'center',
     flex: 1,
   },
   statNumber: {
-    color: '#F8FAFC',
+    color: '#111827',
     fontSize: 15,
     fontWeight: '800',
     marginTop: 4,
   },
   statLabel: {
-    color: '#64748B',
+    color: '#5A6561',
     fontSize: 10,
     fontWeight: '600',
     marginTop: 2,
     textAlign: 'center',
   },
-  // Generic Section Card
+  // Generic Section Card (Page 9 & 10)
   sectionCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8E5',
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -1767,10 +1861,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionCardTitle: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 0.6,
+    letterSpacing: 0.8,
   },
   skillsTagWrap: {
     flexDirection: 'row',
@@ -1778,17 +1872,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   skillPill: {
-    backgroundColor: '#0F172A',
-    borderRadius: 8,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
+    backgroundColor: '#F8FAF9',
+    borderRadius: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.3)',
+    borderColor: '#E2E8E5',
   },
   skillPillText: {
-    color: '#38BDF8',
+    color: '#111827',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   badgesList: {
     gap: 10,
@@ -1796,43 +1890,43 @@ const styles = StyleSheet.create({
   badgeItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0F172A',
-    borderRadius: 12,
+    backgroundColor: '#EBF7F0',
+    borderRadius: 16,
     padding: 12,
   },
   badgeIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#1E293B',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FEF7DA',
     justifyContent: 'center',
     alignItems: 'center',
   },
   badgeIconText: {
-    fontSize: 18,
+    fontSize: 16,
   },
   badgeName: {
-    color: '#F8FAFC',
+    color: '#111827',
     fontSize: 13,
     fontWeight: '700',
   },
   badgeSub: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 11,
     marginTop: 2,
   },
   openSettingsBannerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(56, 189, 248, 0.1)',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#38BDF8',
+    justifyContent: 'space-between',
+    backgroundColor: '#EBF7F0',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: '#0E6245',
   },
   openSettingsBannerText: {
-    color: '#38BDF8',
+    color: '#0E6245',
     fontSize: 13,
     fontWeight: '700',
     flex: 1,
@@ -1842,160 +1936,172 @@ const styles = StyleSheet.create({
   settingsViewContainer: {
     gap: 16,
   },
-  subTabBar: {
-    flexDirection: 'row',
+  settingsTitleRow: {
     marginBottom: 4,
   },
-  subTabPill: {
+  titleWithUnderline: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginRight: 8,
+  },
+  settingsHeaderTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#111827',
+    letterSpacing: -0.5,
+  },
+  subTabBarRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  subTabPill: {
+    height: 38,
+    paddingHorizontal: 16,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   subTabPillActive: {
-    backgroundColor: '#0284C7',
+    backgroundColor: '#18201D',
+  },
+  subTabPillInactive: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
   },
   subTabPillText: {
-    color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
   },
   subTabPillTextActive: {
     color: '#FFFFFF',
     fontWeight: '700',
   },
+  subTabPillTextInactive: {
+    color: '#111827',
+    fontWeight: '600',
+  },
   // Wallet
   walletSection: {
     gap: 12,
   },
-  balanceCard: {
-    backgroundColor: '#0F172A',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1.5,
-    borderColor: 'rgba(251, 191, 36, 0.3)',
+  balanceCardLavender: {
+    backgroundColor: '#F2EEFD',
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 8,
   },
-  balanceSub: {
-    color: '#94A3B8',
+  balanceSubMuted: {
+    color: '#5A6561',
     fontSize: 12,
     fontWeight: '600',
+    marginBottom: 4,
   },
   balanceMainRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    marginTop: 4,
+    marginBottom: 12,
   },
   balanceDigits: {
-    color: '#FBBF24',
-    fontSize: 36,
+    color: '#111827',
+    fontSize: 34,
     fontWeight: '900',
   },
   balanceUnits: {
-    color: '#FCD34D',
+    color: '#7C3AED',
     fontSize: 14,
     fontWeight: '800',
+    letterSpacing: 0.5,
   },
-  balanceMetaRow: {
+  balanceWhitePillRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#1E293B',
-    paddingTop: 10,
   },
-  metaBadge: {
+  monthlyRefillPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 6,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
   },
-  metaBadgeText: {
-    color: '#38BDF8',
+  refillPillText: {
+    color: '#111827',
     fontSize: 11,
     fontWeight: '700',
   },
   rateHintText: {
-    color: '#64748B',
+    color: '#5A6561',
     fontSize: 11,
+    fontWeight: '600',
   },
   ledgerHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
+    marginBottom: 6,
+    marginTop: 6,
   },
   ledgerTitle: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 0.6,
+    letterSpacing: 0.8,
   },
-  toggleLedgerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
+  toggleLedgerBtn: {},
   toggleLedgerText: {
-    color: '#38BDF8',
-    fontSize: 11,
+    color: '#0E6245',
+    fontSize: 12,
     fontWeight: '700',
   },
-  ledgerItem: {
+  transactionCardMint: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    padding: 12,
-    gap: 10,
+    backgroundColor: '#EBF7F0',
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 8,
+    gap: 12,
   },
-  txIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+  txIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#FFFFFF',
   },
-  txEarn: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-  },
-  txSpend: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-  },
+  txEarnCircle: {},
+  txSpendCircle: {},
   txInfo: {
     flex: 1,
   },
   txReason: {
-    color: '#F8FAFC',
-    fontSize: 12,
-    fontWeight: '600',
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '700',
   },
   txDate: {
-    color: '#64748B',
-    fontSize: 10,
+    color: '#5A6561',
+    fontSize: 11,
     marginTop: 2,
   },
   txAmountCol: {
     alignItems: 'flex-end',
   },
   txAmount: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
   },
   txEarnText: {
-    color: '#10B981',
+    color: '#0E6245',
   },
   txSpendText: {
-    color: '#EF4444',
+    color: '#DC2626',
   },
   txBalanceAfter: {
-    color: '#64748B',
-    fontSize: 10,
+    color: '#5A6561',
+    fontSize: 11,
     marginTop: 1,
   },
   // Customization Section
@@ -2005,30 +2111,30 @@ const styles = StyleSheet.create({
   customizationIntroBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E1B4B',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#6366F1',
+    backgroundColor: '#F2EEFD',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 8,
   },
   customizationIntroTitle: {
-    color: '#FBBF24',
-    fontSize: 12,
+    color: '#7C3AED',
+    fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   customizationIntroSub: {
-    color: '#C7D2FE',
+    color: '#111827',
     fontSize: 12,
     marginTop: 2,
     lineHeight: 16,
   },
   customCategoryHeading: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
     marginTop: 8,
+    marginBottom: 6,
   },
   customCardsList: {
     gap: 8,
@@ -2037,11 +2143,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#334155',
+    backgroundColor: '#EBF7F0',
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 6,
   },
   customCardLeft: {
     flexDirection: 'row',
@@ -2058,36 +2163,38 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     borderWidth: 3,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#FFFFFF',
   },
   customCardName: {
-    color: '#F8FAFC',
-    fontSize: 13,
+    color: '#111827',
+    fontSize: 14,
     fontWeight: '700',
   },
   customCardReq: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 11,
-    marginTop: 1,
+    marginTop: 2,
   },
   activePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-  },
-  activePillText: {
-    color: '#10B981',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  activateBtn: {
-    backgroundColor: '#0284C7',
-    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
     paddingVertical: 6,
     paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+  },
+  activePillText: {
+    color: '#111827',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  activateBtn: {
+    backgroundColor: '#18201D',
+    borderRadius: 14,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
   },
   activateBtnText: {
     color: '#FFFFFF',
@@ -2097,13 +2204,15 @@ const styles = StyleSheet.create({
   lockedPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0F172A',
-    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     paddingVertical: 5,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
   },
   lockedPillText: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 11,
     fontWeight: '600',
   },
@@ -2112,22 +2221,21 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   emptySessionsCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    padding: 20,
+    backgroundColor: '#EBF7F0',
+    borderRadius: 18,
+    padding: 24,
     alignItems: 'center',
   },
   emptySessionsText: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 13,
     textAlign: 'center',
   },
   historySessionCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#334155',
+    backgroundColor: '#EBF7F0',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 8,
   },
   historyCardTop: {
     flexDirection: 'row',
@@ -2136,71 +2244,74 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   historySessionTitle: {
-    color: '#F8FAFC',
-    fontSize: 14,
-    fontWeight: '700',
+    color: '#111827',
+    fontSize: 16,
+    fontWeight: '800',
     flex: 1,
     marginRight: 8,
   },
   sessionStatusPill: {
-    borderRadius: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
   },
-  statusDone: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-  },
-  statusSched: {
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-  },
+  statusDone: {},
+  statusSched: {},
   sessionStatusPillText: {
-    color: '#38BDF8',
-    fontSize: 10,
+    color: '#111827',
+    fontSize: 11,
     fontWeight: '800',
   },
   historyHostText: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 12,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   historyMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    alignSelf: 'flex-start',
   },
   historyMetaText: {
-    color: '#64748B',
-    fontSize: 11,
+    color: '#111827',
+    fontSize: 12,
+    fontWeight: '600',
   },
   // Resume Export Customizer & Styles
   resumeSection: {
-    gap: 16,
+    gap: 14,
   },
   resumeConfigHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#334155',
+    backgroundColor: '#F2EEFD',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 8,
   },
   resumeConfigTitle: {
-    color: '#F8FAFC',
+    color: '#111827',
     fontSize: 14,
     fontWeight: '800',
   },
   resumeConfigSub: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 12,
     marginTop: 2,
     lineHeight: 16,
   },
   resumePickerLabel: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 0.6,
-    marginTop: 4,
+    letterSpacing: 0.8,
+    marginTop: 6,
+    marginBottom: 6,
   },
   resumeThemeGrid: {
     flexDirection: 'row',
@@ -2212,10 +2323,11 @@ const styles = StyleSheet.create({
     minWidth: '45%',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0F172A',
-    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     padding: 12,
     borderWidth: 1.5,
+    borderColor: '#E2E8E5',
     gap: 8,
   },
   resumeThemeColorCircle: {
@@ -2226,17 +2338,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   resumeThemeName: {
-    color: '#F8FAFC',
+    color: '#111827',
     fontSize: 13,
     fontWeight: '700',
   },
   resumeTogglesCard: {
-    backgroundColor: '#0F172A',
-    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8E5',
   },
   resumeToggleRow: {
     flexDirection: 'row',
@@ -2244,22 +2356,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E293B',
+    borderBottomColor: '#F1F5F9',
   },
   resumeToggleLabel: {
-    color: '#F8FAFC',
+    color: '#111827',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   resumeToggleSub: {
-    color: '#64748B',
+    color: '#5A6561',
     fontSize: 11,
     marginTop: 2,
   },
   resumePreviewCard: {
-    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
     padding: 18,
     borderWidth: 1.5,
+    borderColor: '#0E6245',
   },
   resumeHeaderRow: {
     flexDirection: 'row',
@@ -2268,9 +2382,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   resumeHeaderBadge: {
-    borderRadius: 6,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
+    backgroundColor: '#0284C7',
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
   },
   resumeHeaderBadgeText: {
     color: '#FFFFFF',
@@ -2278,67 +2393,71 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   resumeDateText: {
-    color: '#94A3B8',
-    fontSize: 11,
+    color: '#5A6561',
+    fontSize: 12,
+    fontWeight: '600',
   },
   resumeTitleText: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.6,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginTop: 8,
   },
   resumeScholarName: {
+    color: '#111827',
     fontSize: 22,
     fontWeight: '800',
     marginTop: 2,
   },
   resumeUsernameText: {
+    color: '#0E6245',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   resumeStudentIdText: {
-    color: '#CBD5E1',
+    color: '#5A6561',
     fontSize: 12,
     marginTop: 4,
     marginBottom: 10,
   },
   resumePreviewBioBox: {
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderRadius: 10,
-    padding: 10,
-    borderWidth: 1,
+    backgroundColor: '#EBF7F0',
+    borderRadius: 14,
+    padding: 12,
     marginBottom: 12,
   },
   resumePreviewBioTitle: {
+    color: '#0E6245',
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
     marginBottom: 4,
   },
   resumePreviewBioText: {
-    color: '#CBD5E1',
-    fontSize: 11,
-    lineHeight: 15,
+    color: '#111827',
+    fontSize: 12,
+    lineHeight: 16,
   },
   resumeStatsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 14,
-    backgroundColor: 'rgba(0, 0, 0, 0.25)',
-    borderRadius: 10,
-    padding: 10,
+    backgroundColor: '#EBF7F0',
+    borderRadius: 14,
+    padding: 12,
   },
   resumeStatItem: {
     alignItems: 'center',
     flex: 1,
   },
   resumeStatVal: {
-    color: '#F8FAFC',
+    color: '#111827',
     fontSize: 16,
     fontWeight: '800',
   },
   resumeStatLbl: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 10,
     marginTop: 2,
   },
@@ -2346,6 +2465,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   resumePreviewSecHeading: {
+    color: '#5A6561',
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
@@ -2357,50 +2477,55 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   resumeSkillChip: {
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderRadius: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
     borderWidth: 1,
+    borderColor: '#E2E8E5',
   },
   resumeSkillChipText: {
-    fontSize: 10,
+    color: '#111827',
+    fontSize: 11,
     fontWeight: '700',
   },
   resumeBadgeChip: {
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderRadius: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
     borderWidth: 1,
+    borderColor: '#E2E8E5',
+    marginBottom: 4,
   },
   resumeBadgeChipText: {
-    color: '#F8FAFC',
-    fontSize: 10,
-    fontWeight: '600',
+    color: '#111827',
+    fontSize: 11,
+    fontWeight: '700',
   },
   resumeAttestationFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-    borderRadius: 8,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    marginTop: 6,
+    backgroundColor: '#EBF7F0',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 10,
+    gap: 8,
   },
   resumeAttestationText: {
-    color: '#CBD5E1',
+    color: '#0E6245',
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
     flex: 1,
   },
   exportPngBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 14,
-    paddingVertical: 14,
+    backgroundColor: '#0E6245',
+    borderRadius: 22,
+    height: 48,
+    marginTop: 16,
   },
   exportPngBtnText: {
     color: '#FFFFFF',

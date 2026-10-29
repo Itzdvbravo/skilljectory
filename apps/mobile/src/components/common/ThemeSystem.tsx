@@ -2,66 +2,78 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, StyleProp, ViewStyle } from 'react-native';
 import { useAuthStore } from '../../store/authStore';
 
+import Svg, { Path } from 'react-native-svg';
+
 export interface ThemeColors {
   name: string;
   background: string;
   surface: string;
   surfaceLight: string;
+  surfaceMint: string;
+  surfaceRose: string;
+  surfacePurple: string;
+  surfaceYellow: string;
+  surfaceMuted: string;
   primary: string;
   primaryGlow: string;
+  primaryDark: string;
   secondary: string;
   accent: string;
   text: string;
+  textSecondary: string;
   textMuted: string;
   border: string;
+  pillDark: string;
 }
 
+export const ARTBOARD_THEME: ThemeColors = {
+  name: 'Campus Academic Light',
+  background: '#F8FAF9',
+  surface: '#FFFFFF',
+  surfaceLight: '#F3F6F4',
+  surfaceMint: '#EBF7F0',
+  surfaceRose: '#FDE8EE',
+  surfacePurple: '#F2EEFD',
+  surfaceYellow: '#FEF7DA',
+  surfaceMuted: '#EFF3F1',
+  primary: '#0E6245',
+  primaryGlow: 'rgba(14, 98, 69, 0.15)',
+  primaryDark: '#084832',
+  secondary: '#38BDF8',
+  accent: '#0E6245',
+  text: '#111827',
+  textSecondary: '#374151',
+  textMuted: '#6B7280',
+  border: '#E2E8E5',
+  pillDark: '#18201D',
+};
+
 export const THEMES: Record<string, ThemeColors> = {
-  profile_theme_sunrise: {
-    name: 'Sunrise Horizon',
-    background: '#0B0A14',
-    surface: '#151324',
-    surfaceLight: '#211D38',
-    primary: '#F59E0B',
-    primaryGlow: 'rgba(245, 158, 11, 0.25)',
-    secondary: '#EC4899',
-    accent: '#FB923C',
-    text: '#FFF1F2',
-    textMuted: '#A78BFA',
-    border: '#3B2D54',
-  },
-  profile_theme_midnight: {
-    name: 'Midnight OLED',
-    background: '#030508',
-    surface: '#0A0F1D',
-    surfaceLight: '#111A30',
-    primary: '#00F0FF',
-    primaryGlow: 'rgba(0, 240, 255, 0.25)',
-    secondary: '#38BDF8',
-    accent: '#6366F1',
-    text: '#F8FAFC',
-    textMuted: '#64748B',
-    border: '#1E293B',
-  },
-  profile_theme_aurora: {
-    name: 'Aurora Borealis',
-    background: '#04130F',
-    surface: '#0B241E',
-    surfaceLight: '#12382F',
-    primary: '#10B981',
-    primaryGlow: 'rgba(16, 185, 129, 0.25)',
-    secondary: '#8B5CF6',
-    accent: '#34D399',
-    text: '#F0FDF4',
-    textMuted: '#6EE7B7',
-    border: '#174E40',
-  },
+  profile_theme_sunrise: ARTBOARD_THEME,
+  profile_theme_midnight: ARTBOARD_THEME,
+  profile_theme_aurora: ARTBOARD_THEME,
 };
 
 export function useAppTheme(): ThemeColors {
-  const activeThemeKey = useAuthStore((s) => s.activeThemeKey) || 'profile_theme_sunrise';
-  return THEMES[activeThemeKey] || THEMES.profile_theme_sunrise;
+  return ARTBOARD_THEME;
 }
+
+export const BrandUnderline: React.FC<{ width?: number | string; style?: StyleProp<ViewStyle> }> = ({
+  width = 75,
+  style,
+}) => (
+  <View style={[{ height: 6, width: typeof width === 'number' ? width : 75, marginTop: 2 }, style]}>
+    <Svg width="100%" height="6" viewBox="0 0 100 6">
+      <Path
+        d="M 2 2 Q 50 6 98 2"
+        stroke="#0E6245"
+        strokeWidth="3.5"
+        strokeLinecap="round"
+        fill="none"
+      />
+    </Svg>
+  </View>
+);
 
 interface AvatarWithBadgeFrameProps {
   name?: string;
@@ -145,7 +157,7 @@ export const AvatarWithBadgeFrame: React.FC<AvatarWithBadgeFrameProps> = ({
               width: size - frameBorderWidth * 2,
               height: size - frameBorderWidth * 2,
               borderRadius: size / 2,
-              backgroundColor: isGold ? '#2D2006' : isBronze ? '#2A180E' : '#0F1E36',
+              backgroundColor: isGold ? '#B45309' : isBronze ? '#9A3412' : '#0E6245',
             },
           ]}
         >
@@ -154,7 +166,7 @@ export const AvatarWithBadgeFrame: React.FC<AvatarWithBadgeFrameProps> = ({
               styles.avatarInitials,
               {
                 fontSize: size * 0.38,
-                color: isGold ? '#FCD34D' : isBronze ? '#FDBA74' : '#38BDF8',
+                color: isGold ? '#FEF3C7' : isBronze ? '#FFEDD5' : '#FFFFFF',
               },
             ]}
           >

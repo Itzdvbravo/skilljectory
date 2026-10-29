@@ -7,7 +7,20 @@ import {
   TouchableOpacity,
   Dimensions,
 } from 'react-native';
-import { Award, Coins, Flame, Sparkles } from 'lucide-react-native';
+import {
+  Award,
+  Coins,
+  Flame,
+  Sparkles,
+  Clock,
+  Calendar,
+  Megaphone,
+  Users,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  PlayCircle,
+} from 'lucide-react-native';
 import { NotificationDto, NotificationType } from '@skill-exchange/shared-types';
 
 interface AchievementToastProps {
@@ -65,19 +78,103 @@ export const AchievementToast: React.FC<AchievementToastProps> = ({
     });
   };
 
-  const getIcon = () => {
+  const getToastMeta = () => {
+    const ref = (notification.referenceType || '').toLowerCase();
+
+    if (ref === 'one_to_one_invitation' || ref.includes('invitation')) {
+      return {
+        badgeText: 'ACTION REQUIRED: 1-ON-1 INVITATION',
+        accentColor: '#10B981',
+        icon: <Calendar size={26} color="#10B981" />,
+      };
+    }
+
+    if (ref === 'session_cohost_request') {
+      return {
+        badgeText: 'ACTION REQUIRED: CO-HOST INVITE',
+        accentColor: '#F59E0B',
+        icon: <Users size={26} color="#F59E0B" />,
+      };
+    }
+
+    if (ref === 'session_started_early') {
+      return {
+        badgeText: 'SESSION STARTED EARLY',
+        accentColor: '#38BDF8',
+        icon: <PlayCircle size={26} color="#38BDF8" />,
+      };
+    }
+
+    if (ref === 'session_stopped_early') {
+      return {
+        badgeText: 'SESSION CONCLUDED EARLY',
+        accentColor: '#F97316',
+        icon: <Clock size={26} color="#F97316" />,
+      };
+    }
+
+    if (ref === 'one_to_one_accepted') {
+      return {
+        badgeText: 'INVITATION ACCEPTED',
+        accentColor: '#10B981',
+        icon: <CheckCircle2 size={26} color="#10B981" />,
+      };
+    }
+
+    if (ref === 'one_to_one_declined') {
+      return {
+        badgeText: 'INVITATION DECLINED',
+        accentColor: '#EF4444',
+        icon: <XCircle size={26} color="#EF4444" />,
+      };
+    }
+
+    if (ref === 'session_announcement') {
+      return {
+        badgeText: 'CAMPUS ANNOUNCEMENT',
+        accentColor: '#818CF8',
+        icon: <Megaphone size={26} color="#818CF8" />,
+      };
+    }
+
+    if (ref.startsWith('session_')) {
+      return {
+        badgeText: 'SESSION UPDATE',
+        accentColor: '#38BDF8',
+        icon: <Clock size={26} color="#38BDF8" />,
+      };
+    }
+
     switch (notification.type) {
       case NotificationType.SIGNUP_BONUS:
-        return <Coins size={28} color="#FBBF24" />;
+        return {
+          badgeText: 'CAMPUS WELCOME BONUS 🪙',
+          accentColor: '#FBBF24',
+          icon: <Coins size={26} color="#FBBF24" />,
+        };
       case NotificationType.SESSION_MILESTONE:
-        return <Flame size={28} color="#F97316" />;
+        return {
+          badgeText: 'TEACHING MILESTONE 🔥',
+          accentColor: '#F97316',
+          icon: <Flame size={26} color="#F97316" />,
+        };
       case NotificationType.CUSTOMIZATION_UNLOCKED:
-        return <Sparkles size={28} color="#A855F7" />;
+        return {
+          badgeText: 'CUSTOMIZATION UNLOCKED ✨',
+          accentColor: '#A855F7',
+          icon: <Sparkles size={26} color="#A855F7" />,
+        };
       case NotificationType.BADGE_UNLOCKED:
       default:
-        return <Award size={28} color="#60A5FA" />;
+        return {
+          badgeText: 'ACHIEVEMENT UNLOCKED 🏆',
+          accentColor: '#60A5FA',
+          icon: <Award size={26} color="#60A5FA" />,
+        };
     }
   };
+
+  const { badgeText, accentColor, icon } = getToastMeta();
 
   return (
     <Animated.View
@@ -93,12 +190,12 @@ export const AchievementToast: React.FC<AchievementToastProps> = ({
       <TouchableOpacity
         activeOpacity={0.85}
         onPress={dismiss}
-        style={styles.card}
+        style={[styles.card, { borderColor: accentColor, shadowColor: accentColor }]}
       >
-        <View style={styles.iconContainer}>{getIcon()}</View>
+        <View style={styles.iconContainer}>{icon}</View>
         <View style={styles.textContainer}>
           <View style={styles.headerRow}>
-            <Text style={styles.badgeText}>ACHIEVEMENT UNLOCKED</Text>
+            <Text style={[styles.badgeText, { color: accentColor }]}>{badgeText}</Text>
           </View>
           <Text style={styles.titleText} numberOfLines={1}>
             {notification.title}

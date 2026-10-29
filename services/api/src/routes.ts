@@ -12,6 +12,7 @@ import { ShowcaseService } from './modules/showcase/showcase.service.js';
 import { AnalyticsService } from './modules/analytics/analytics.service.js';
 import { BadgesService } from './modules/badges/badges.service.js';
 import { BannersService } from './modules/banners/banners.service.js';
+import { ExportService } from './modules/export/export.service.js';
 import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.middleware.js';
 import { requireVerifiedUser } from './middleware/verification.middleware.js';
 import { rateLimitSessionCreation } from './middleware/rateLimit.middleware.js';
@@ -289,6 +290,34 @@ router.post('/sessions/:id/start-early', authMiddleware, requireVerifiedUser, as
   }
 });
 
+// Mentor / Host: Conclude with Attendance Review
+router.post('/sessions/:id/conclude', authMiddleware, requireVerifiedUser, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await SessionsService.concludeSessionWithAttendance(
+      req.user!.id,
+      req.params.id,
+      req.body.attendance
+    );
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Mentor / Host: Stop Early
+router.post('/sessions/:id/stop-early', authMiddleware, requireVerifiedUser, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await SessionsService.stopSessionEarly(
+      req.user!.id,
+      req.params.id,
+      req.body.attendance
+    );
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/sessions/:id/announce', authMiddleware, requireVerifiedUser, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await SessionsService.announceSession(req.user!.id, req.params.id);
@@ -513,6 +542,87 @@ router.post('/banners/generate', authMiddleware, requireVerifiedUser, async (req
       req.body.sourceId
     );
     res.status(201).json(banner);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ================= EXPORT PNG ROUTES =================
+router.post('/export/banner-png', optionalAuthMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    let params = req.body;
+    if (params.sessionId) {
+      const session = await SessionsService.getSessionDetail(params.sessionId);
+      if (session) {
+        params = {
+          ...params,
+          title: session.title || session.skillName,
+          skillName: session.skillName,
+          sessionType: session.sessionType,
+          hostName: session.hostName,
+          hostUsername: session.hostUsername,
+          scheduledAt: session.scheduledAt,
+          durationHours: session.durationHours,
+          locationMode: session.locationMode,
+          meetingLink: session.meetingLink,
+          locationAddress: session.locationAddress,
+          skillsTags: session.skillsTags,
+        };
+      }
+    }
+    const result = await ExportService.generateBannerPng(params);
+
+    if (req.query.download === 'true' || req.headers.accept?.includes('image/png')) {
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+      return res.send(result.buffer);
+    }
+
+    res.json({
+      pngBase64: result.base64,
+      fileName: result.fileName,
+      success: true,
+    });
+  } catch (err) {
+    console.error('[EXPORT BANNER ERROR]:', err);
+    next(err);
+  }
+});
+
+router.post('/export/resume-png', optionalAuthMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    let params = req.body;
+    if (!params.name && req.user?.id) {
+      const user = await UsersService.getMe(req.user.id);
+      if (user) {
+        params = {
+          ...params,
+          name: user.name,
+          username: user.username,
+          studentId: user.studentId,
+          bio: user.bio,
+          hours: user.totalSessionHours || (user as any).hoursTaught || 0,
+          sessions: (user as any).sessionsConducted || (user as any).completedSessionsCount || 0,
+          rating: (user as any).averageRating || 5.0,
+          credits: user.creditBalance || 0,
+          skills: (user as any).user_skills?.map((s: any) => s.skill?.name || s.name) || [],
+          badges: (user as any).user_badges?.map((b: any) => b.badge?.name || b.name) || [],
+        };
+      }
+    }
+    const result = await ExportService.generateResumePng(params);
+
+    if (req.query.download === 'true' || req.headers.accept?.includes('image/png')) {
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+      return res.send(result.buffer);
+    }
+
+    res.json({
+      pngBase64: result.base64,
+      fileName: result.fileName,
+      success: true,
+    });
   } catch (err) {
     next(err);
   }

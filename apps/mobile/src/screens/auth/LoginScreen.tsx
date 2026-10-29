@@ -16,6 +16,8 @@ import { useAuthStore } from '../../store/authStore';
 import { api } from '../../services/api';
 import { GraduationCap, ArrowRight, Sparkles, ShieldCheck } from 'lucide-react-native';
 
+import { BrandUnderline } from '../../components/common/ThemeSystem';
+
 export const LoginScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const [identifier, setIdentifier] = useState('');
@@ -60,7 +62,7 @@ export const LoginScreen = ({ navigation }: any) => {
       setAuth(res.token || res.accessToken, res.user);
       Alert.alert(
         'Unlocked Account Activated ⚡',
-        'Logged in as Campus Administrator!\n\n• 999.0 Time-Credits Balance\n• Aurora Theme & Gold Prestige Frame\n• Blogging & Showcase Fully Unlocked\n• Full Verification Status'
+        'Logged in as Campus Administrator!\n\n• 999.0 Time-Credits Balance\n• Aurora Theme & Gold Prestige Frame\n• Full Verification Status'
       );
     } catch (err: any) {
       Alert.alert('Admin Login Error', err.message || 'Could not connect to backend server.');
@@ -72,7 +74,7 @@ export const LoginScreen = ({ navigation }: any) => {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1, backgroundColor: '#0B0F19' }}
+      style={{ flex: 1, backgroundColor: '#F8FAF9' }}
     >
       <ScrollView
         style={styles.container}
@@ -84,9 +86,15 @@ export const LoginScreen = ({ navigation }: any) => {
       >
         <View style={styles.header}>
           <View style={styles.iconCircle}>
-            <GraduationCap size={36} color="#38BDF8" />
+            <GraduationCap size={36} color="#0E6245" />
           </View>
-          <Text style={styles.appName}>SKILLJECTORY</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+            <Text style={styles.appName}>SKILL</Text>
+            <View style={{ alignItems: 'center' }}>
+              <Text style={styles.appName}>JECTORY</Text>
+              <BrandUnderline width={60} style={{ marginTop: 2 }} />
+            </View>
+          </View>
           <Text style={styles.tagline}>
             Campus Skill Exchange • Assam Down Town University
           </Text>
@@ -99,7 +107,7 @@ export const LoginScreen = ({ navigation }: any) => {
           <TextInput
             style={styles.input}
             placeholder="student@adtu.in or username"
-            placeholderTextColor="#64748B"
+            placeholderTextColor="#9CA3AF"
             value={identifier}
             onChangeText={setIdentifier}
             autoCapitalize="none"
@@ -110,7 +118,7 @@ export const LoginScreen = ({ navigation }: any) => {
           <TextInput
             style={styles.input}
             placeholder="••••••••"
-            placeholderTextColor="#64748B"
+            placeholderTextColor="#9CA3AF"
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -120,7 +128,7 @@ export const LoginScreen = ({ navigation }: any) => {
             style={styles.loginBtn}
             onPress={handleLogin}
             disabled={loading || adminLoading}
-            activeOpacity={0.8}
+            activeOpacity={0.88}
           >
             {loading ? (
               <ActivityIndicator color="#FFFFFF" />
@@ -132,23 +140,23 @@ export const LoginScreen = ({ navigation }: any) => {
             )}
           </TouchableOpacity>
 
-          {/* Temporary Unlocked "Admin" One-Click Login Button */}
+          {/* Quick Admin Login */}
           <TouchableOpacity
             style={styles.adminQuickBtn}
             onPress={handleAdminLogin}
             disabled={loading || adminLoading}
-            activeOpacity={0.8}
+            activeOpacity={0.88}
           >
             {adminLoading ? (
-              <ActivityIndicator color="#F59E0B" />
+              <ActivityIndicator color="#0E6245" />
             ) : (
               <View style={{ alignItems: 'center' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Sparkles size={16} color="#F59E0B" style={{ marginRight: 6 }} />
-                  <Text style={styles.adminQuickBtnText}>⚡ Login as Admin (Everything Unlocked)</Text>
+                  <Sparkles size={15} color="#0E6245" style={{ marginRight: 6 }} />
+                  <Text style={styles.adminQuickBtnText}>⚡ Login as Campus Administrator</Text>
                 </View>
                 <Text style={styles.adminQuickBtnSub}>
-                  999 Credits • Aurora & Gold Crown Themes • All Features
+                  999 Credits • All Themes & Badges Unlocked
                 </Text>
               </View>
             )}
@@ -160,7 +168,7 @@ export const LoginScreen = ({ navigation }: any) => {
             activeOpacity={0.8}
           >
             <Text style={styles.signupLinkText}>
-              New student? <Text style={styles.linkHighlight}>Register with @adtu.in (3 Free Credits)</Text>
+              New student? <Text style={styles.linkHighlight}>Register with @adtu.in</Text>
             </Text>
           </TouchableOpacity>
         </View>
@@ -172,7 +180,7 @@ export const LoginScreen = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#F8FAF9',
   },
   content: {
     paddingHorizontal: 20,
@@ -181,68 +189,69 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: 26,
+    marginBottom: 24,
   },
   iconCircle: {
     width: 68,
     height: 68,
     borderRadius: 34,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#EBF7F0',
     borderWidth: 1.5,
-    borderColor: '#38BDF8',
+    borderColor: '#0E6245',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   appName: {
-    color: '#F8FAFC',
-    fontSize: 22,
+    color: '#111827',
+    fontSize: 24,
     fontWeight: '900',
-    letterSpacing: 2,
-    marginBottom: 6,
+    letterSpacing: 1,
+    marginBottom: 4,
   },
   tagline: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 13,
     textAlign: 'center',
+    marginTop: 6,
   },
   formCard: {
-    backgroundColor: '#0F172A',
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#1E293B',
-    padding: 22,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+    padding: 24,
   },
   formTitle: {
-    color: '#F8FAFC',
-    fontSize: 18,
-    fontWeight: '700',
+    color: '#111827',
+    fontSize: 19,
+    fontWeight: '800',
     marginBottom: 16,
   },
   label: {
-    color: '#94A3B8',
+    color: '#374151',
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 6,
   },
   input: {
-    backgroundColor: '#1E293B',
-    borderRadius: 10,
+    backgroundColor: '#F8FAF9',
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#334155',
-    color: '#F8FAFC',
-    paddingHorizontal: 12,
+    borderColor: '#E2E8E5',
+    color: '#111827',
+    paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 14,
     marginBottom: 14,
   },
   loginBtn: {
-    backgroundColor: '#0284C7',
+    backgroundColor: '#0E6245',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 24,
     marginTop: 6,
   },
   loginBtnText: {
@@ -253,21 +262,21 @@ const styles = StyleSheet.create({
   adminQuickBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#F59E0B',
+    backgroundColor: '#EBF7F0',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#0E6245',
     paddingVertical: 12,
     paddingHorizontal: 10,
     marginTop: 14,
   },
   adminQuickBtnText: {
-    color: '#FBBF24',
+    color: '#0E6245',
     fontSize: 13,
     fontWeight: '800',
   },
   adminQuickBtnSub: {
-    color: '#D97706',
+    color: '#084832',
     fontSize: 11,
     fontWeight: '600',
     marginTop: 2,
@@ -277,11 +286,11 @@ const styles = StyleSheet.create({
     marginTop: 18,
   },
   signupLinkText: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 13,
   },
   linkHighlight: {
-    color: '#38BDF8',
+    color: '#0E6245',
     fontWeight: '700',
   },
 });

@@ -24,21 +24,21 @@ import {
   Calendar,
   Clock,
   Users,
-  Flame,
-  MapPin,
   Globe,
+  MapPin,
   KeyRound,
   Compass,
-  ArrowRight,
+  ArrowUpRight,
   Plus,
 } from 'lucide-react-native';
+import { BrandUnderline } from '../../components/common/ThemeSystem';
 
 export const DiscoverScreen = ({ navigation }: any) => {
   const [query, setQuery] = useState('');
   const [sessions, setSessions] = useState<SessionDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [formatFilter, setFormatFilter] = useState<'all' | 'group' | 'multi'>('all');
+  const [formatFilter, setFormatFilter] = useState<'all' | 'workshops' | 'multi' | 'one_to_one'>('all');
 
   // Private Code Modal
   const [codeModalOpen, setCodeModalOpen] = useState(false);
@@ -54,7 +54,6 @@ export const DiscoverScreen = ({ navigation }: any) => {
   const fetchOpenSessions = async () => {
     try {
       setLoading(true);
-      // Fetch public discoverable sessions open to all students
       const data = await api.getSessions('discover', query).catch(() => []);
       setSessions(data || []);
     } finally {
@@ -66,10 +65,10 @@ export const DiscoverScreen = ({ navigation }: any) => {
   const handleJoinDirect = async (session: SessionDto) => {
     try {
       await api.joinSession(session.id);
-      Alert.alert('Session Joined!', `You are registered for ${session.skillName}.`);
+      Alert.alert('Session Joined!', `You are registered for ${session.skillName || session.title}.`);
       fetchOpenSessions();
     } catch (err: any) {
-      Alert.alert('Registration Notice', err.message || 'Successfully joined demo session.');
+      Alert.alert('Registration Notice', err.message || 'Successfully joined session.');
     }
   };
 
@@ -95,10 +94,10 @@ export const DiscoverScreen = ({ navigation }: any) => {
   };
 
   const filteredSessions = sessions.filter((s) => {
-    // 1-on-1 direct mentoring and private sessions are excluded from public discovery
-    if (s.sessionType === SessionType.ONE_TO_ONE || s.isPrivate) return false;
-    if (formatFilter === 'group' && s.sessionType !== SessionType.GROUP) return false;
+    if (s.isPrivate) return false;
+    if (formatFilter === 'workshops' && s.sessionType !== SessionType.GROUP) return false;
     if (formatFilter === 'multi' && s.sessionType !== SessionType.MULTI_MENTOR) return false;
+    if (formatFilter === 'one_to_one' && s.sessionType !== SessionType.ONE_TO_ONE) return false;
 
     if (!query.trim()) return true;
     const q = query.toLowerCase().trim();
@@ -109,19 +108,39 @@ export const DiscoverScreen = ({ navigation }: any) => {
       (s.hostName || '').toLowerCase().includes(q) ||
       (s.hostUsername || '').toLowerCase().includes(q);
     const matchTags = (s.skillsTags || []).some((t) => t.toLowerCase().includes(q));
-    const matchMentors = (s.mentors || []).some(
-      (m) =>
-        (m.name || '').toLowerCase().includes(q) ||
-        (m.username || '').toLowerCase().includes(q)
-    );
 
-    return matchTitle || matchSkill || matchDesc || matchHost || matchTags || matchMentors;
+    return matchTitle || matchSkill || matchDesc || matchHost || matchTags;
   });
+
+  const getInitials = (name?: string) => {
+    if (!name) return 'CA';
+    return name
+      .split(' ')
+      .map((w) => w[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase();
+  };
+
+  const formatSchedule = (dateStr: string | Date) => {
+    const d = new Date(dateStr);
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const day = days[d.getDay()];
+    const date = d.getDate();
+    const month = months[d.getMonth()];
+    let hours = d.getHours();
+    const minutes = d.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'pm' : 'am';
+    hours = hours % 12 || 12;
+    return `${day}, ${date} ${month} at ${hours}:${minutes} ${ampm}`;
+  };
 
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -129,220 +148,207 @@ export const DiscoverScreen = ({ navigation }: any) => {
             setRefreshing(true);
             fetchOpenSessions();
           }}
-          tintColor="#38BDF8"
+          tintColor="#0E6245"
         />
       }
     >
-      {/* Header & Search */}
-      <View style={styles.header}>
-        <View style={styles.headerTitleRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Campus Session Radar</Text>
-            <Text style={styles.subtitle}>
-              Upcoming peer exchange sessions open for everyone to join
-            </Text>
+      {/* Top Profile / Action Bar (Page 1 Artboard) */}
+      <View style={styles.topBar}>
+        <View style={styles.topProfileLeft}>
+          <View style={styles.avatarCircle}>
+            <Text style={styles.avatarInitials}>{getInitials(user?.name || 'Campus Administrator')}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.codeQuickBtn}
-            onPress={() => setCodeModalOpen(true)}
-            activeOpacity={0.8}
-          >
-            <KeyRound size={14} color="#FBBF24" style={{ marginRight: 4 }} />
-            <Text style={styles.codeQuickBtnText}>Enter Code</Text>
-          </TouchableOpacity>
+          <Text style={styles.topProfileName}>{user?.name || 'Campus Administrator'}</Text>
         </View>
 
-        {/* Search Bar */}
-        <View style={styles.searchBar}>
-          <Search size={18} color="#94A3B8" style={{ marginRight: 8 }} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search by topic, skill name, or mentor..."
-            placeholderTextColor="#64748B"
-            value={query}
-            onChangeText={setQuery}
-          />
+        <TouchableOpacity
+          style={styles.enterCodeBtn}
+          onPress={() => setCodeModalOpen(true)}
+          activeOpacity={0.8}
+        >
+          <KeyRound size={14} color="#854D0E" style={{ marginRight: 6 }} />
+          <Text style={styles.enterCodeText}>Enter code</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Campus Session Radar Title (Page 1 Artboard) */}
+      <View style={styles.headerSection}>
+        <View style={styles.radarTitleRow}>
+          <Text style={styles.radarTitle}>Campus session </Text>
+          <View style={{ alignItems: 'center' }}>
+            <Text style={styles.radarTitle}>radar</Text>
+            <BrandUnderline width={64} style={{ marginTop: 2 }} />
+          </View>
         </View>
-      </View>
-
-      {/* Format Filter Chips */}
-      <View style={styles.filterChipRow}>
-        {[
-          { id: 'all', label: 'All Sessions' },
-          { id: 'group', label: 'Group Workshops' },
-          { id: 'multi', label: 'Multi-Host' },
-        ].map((f) => (
-          <TouchableOpacity
-            key={f.id}
-            style={[styles.filterChip, formatFilter === f.id && styles.filterChipActive]}
-            onPress={() => setFormatFilter(f.id as any)}
-          >
-            <Text
-              style={[
-                styles.filterChipText,
-                formatFilter === f.id && styles.filterChipTextActive,
-              ]}
-            >
-              {f.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Open Sessions List */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>
-          SESSIONS OPEN FOR REGISTRATION ({filteredSessions.length})
+        <Text style={styles.radarSubtitle}>
+          Upcoming peer sessions open to everyone
         </Text>
       </View>
 
+      {/* Search Input (Page 1 Artboard) */}
+      <View style={styles.searchContainer}>
+        <Search size={18} color="#6B7280" style={{ marginRight: 10 }} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by topic, skill or mentor"
+          placeholderTextColor="#9CA3AF"
+          value={query}
+          onChangeText={setQuery}
+        />
+      </View>
+
+      {/* Filter Chips Row (Page 1 Artboard) */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterChipRow}
+      >
+        {[
+          { id: 'all', label: 'All' },
+          { id: 'workshops', label: 'Workshops' },
+          { id: 'multi', label: 'Multi-host' },
+          { id: 'one_to_one', label: '1-on-1' },
+        ].map((f) => {
+          const isActive = formatFilter === f.id;
+          return (
+            <TouchableOpacity
+              key={f.id}
+              style={[styles.filterChip, isActive ? styles.filterChipActive : styles.filterChipInactive]}
+              onPress={() => setFormatFilter(f.id as any)}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.filterChipText,
+                  isActive ? styles.filterChipTextActive : styles.filterChipTextInactive,
+                ]}
+              >
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      {/* Section Subheader */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>
+          OPEN FOR REGISTRATION ({filteredSessions.length})
+        </Text>
+      </View>
+
+      {/* Session Cards Feed */}
       {loading ? (
-        <ActivityIndicator size="large" color="#38BDF8" style={{ marginTop: 30 }} />
+        <ActivityIndicator size="large" color="#0E6245" style={{ marginTop: 36 }} />
       ) : filteredSessions.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Compass size={40} color="#475569" style={{ marginBottom: 10 }} />
-          <Text style={styles.emptyTitle}>No Open Sessions Match</Text>
+          <Compass size={44} color="#0E6245" style={{ marginBottom: 12 }} />
+          <Text style={styles.emptyTitle}>No sessions found</Text>
           <Text style={styles.emptySub}>
-            Be the first to host a session on this topic and earn time-credits!
+            Be the first to host an exchange session and earn campus time-credits!
           </Text>
           <TouchableOpacity
             style={styles.hostNowBtn}
             onPress={() => navigation.navigate('CreateSession')}
+            activeOpacity={0.88}
           >
-            <Plus size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-            <Text style={styles.hostNowText}>Host a Session</Text>
+            <Plus size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Text style={styles.hostNowText}>Host a session</Text>
           </TouchableOpacity>
         </View>
       ) : (
         filteredSessions.map((session) => {
-          const scheduledDateObj = new Date(session.scheduledAt);
-          const maxCap = session.maxParticipants || 15;
+          const isOneToOne = session.sessionType === SessionType.ONE_TO_ONE;
+          const maxCap = session.maxParticipants || 10;
           const currentCount = session.participantsCount ?? (session.participants?.length || 0);
           const spotsLeft = Math.max(0, maxCap - currentCount);
-          const isFull = spotsLeft === 0;
-          const hasJoined = session.hasJoined || session.participants?.some((p) => p.userId === user?.id);
+          const isFull = !isOneToOne && spotsLeft === 0;
+
+          const myParticipant = session.participants?.find((p: any) => p.userId === user?.id);
+          const requiresChanges = (session as any).hasPendingInvite || (session as any).requiresAction || (myParticipant && !myParticipant.attendanceConfirmed && session.status === 'completed');
+
+          // Green (#EBF7F0) as standard session color, Yellow (#FEF7DA) for sessions requiring changes/action
+          const cardBgColor = requiresChanges ? '#FEF7DA' : '#EBF7F0';
 
           return (
             <TouchableOpacity
               key={session.id}
-              style={styles.sessionCard}
-              activeOpacity={0.88}
+              style={[styles.sessionCard, { backgroundColor: cardBgColor }]}
+              activeOpacity={0.9}
               onPress={() => navigation.navigate('SessionDetail', { session })}
             >
-              <View style={styles.cardHeader}>
-                {/* Format Badge */}
-                <View style={styles.formatBadge}>
-                  {session.sessionType === SessionType.MULTI_MENTOR ? (
+              {/* Top Capsule Row */}
+              <View style={styles.cardHeaderRow}>
+                <View style={styles.capsuleBadge}>
+                  {isOneToOne ? (
+                    <Text style={styles.capsuleBadgeText}>1-ON-1</Text>
+                  ) : session.sessionType === SessionType.MULTI_MENTOR ? (
                     <>
-                      <Flame size={12} color="#C084FC" style={{ marginRight: 4 }} />
-                      <Text style={styles.formatTextMulti}>MULTI-HOST</Text>
-                    </>
-                  ) : session.sessionType === SessionType.GROUP ? (
-                    <>
-                      <Users size={12} color="#38BDF8" style={{ marginRight: 4 }} />
-                      <Text style={styles.formatTextGroup}>GROUP</Text>
+                      <Users size={12} color="#111827" style={{ marginRight: 4 }} />
+                      <Text style={styles.capsuleBadgeText}>MULTI-HOST</Text>
                     </>
                   ) : (
-                    <Text style={styles.formatText1on1}>1-ON-1</Text>
+                    <>
+                      <Users size={12} color="#111827" style={{ marginRight: 4 }} />
+                      <Text style={styles.capsuleBadgeText}>GROUP</Text>
+                    </>
                   )}
                 </View>
 
-                {/* Location Badge */}
-                <View
-                  style={[
-                    styles.locationBadge,
-                    session.locationMode === LocationMode.ONLINE
-                      ? styles.locOnline
-                      : styles.locOffline,
-                  ]}
-                >
-                  {session.locationMode === LocationMode.ONLINE ? (
+                <View style={styles.capsuleBadge}>
+                  {session.locationMode === LocationMode.OFFLINE ? (
                     <>
-                      <Globe size={11} color="#38BDF8" style={{ marginRight: 4 }} />
-                      <Text style={styles.locTextOnline}>Online</Text>
-                    </>
-                  ) : session.locationMode === LocationMode.OFFLINE ? (
-                    <>
-                      <MapPin size={11} color="#F59E0B" style={{ marginRight: 4 }} />
-                      <Text style={styles.locTextOffline}>Campus</Text>
+                      <MapPin size={12} color="#111827" style={{ marginRight: 4 }} />
+                      <Text style={styles.capsuleBadgeText}>Offline</Text>
                     </>
                   ) : (
                     <>
-                      <Globe size={11} color="#A855F7" style={{ marginRight: 4 }} />
-                      <Text style={styles.locTextHybrid}>Hybrid</Text>
+                      <Globe size={12} color="#111827" style={{ marginRight: 4 }} />
+                      <Text style={styles.capsuleBadgeText}>Online</Text>
                     </>
                   )}
                 </View>
               </View>
 
-              {/* Title & Host */}
-              <Text style={styles.sessionTitle}>{session.skillName}</Text>
-              <Text style={styles.hostLine}>
-                Mentored by <Text style={{ color: '#F8FAFC', fontWeight: '700' }}>{session.hostName}</Text>
+              {/* Title & Mentor */}
+              <Text style={styles.cardTitle}>{session.skillName || session.title}</Text>
+              <Text style={styles.mentorText}>
+                Mentored by {session.hostName || session.hostUsername || 'Campus Administrator'}
               </Text>
 
-              {/* Date & Time (Prominently Available) */}
-              <View style={styles.dateTimeBadge}>
-                <Calendar size={13} color="#38BDF8" style={{ marginRight: 6 }} />
-                <Text style={styles.dateTimeText}>
-                  {scheduledDateObj.toLocaleDateString([], {
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                  })}{' '}
-                  at{' '}
-                  {scheduledDateObj.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+              {/* Date Capsule Banner */}
+              <View style={styles.whiteCapsuleRow}>
+                <Calendar size={14} color="#111827" style={{ marginRight: 6 }} />
+                <Text style={styles.whiteCapsuleText}>
+                  {formatSchedule(session.scheduledAt)}
                 </Text>
               </View>
 
-              {/* Group Capacity Counter: How many joined & how many left */}
-              {session.sessionType !== SessionType.ONE_TO_ONE && (
-                <View style={styles.capacityBadge}>
-                  <Users size={13} color="#A855F7" style={{ marginRight: 6 }} />
-                  <Text style={styles.capacityText}>
-                    <Text style={{ color: '#F8FAFC', fontWeight: '700' }}>{currentCount}/{maxCap}</Text> students joined
-                    {' • '}
-                    <Text
-                      style={{
-                        color: isFull ? '#EF4444' : '#38BDF8',
-                        fontWeight: '700',
-                      }}
-                    >
-                      {isFull ? 'Full (0 spots left)' : `${spotsLeft} spots left`}
-                    </Text>
+              {/* Spots / Capacity (Group sessions) */}
+              {!isOneToOne && (
+                <View style={styles.whiteCapsuleRow}>
+                  <Users size={14} color="#111827" style={{ marginRight: 6 }} />
+                  <Text style={styles.whiteCapsuleText}>
+                    {currentCount}/{maxCap} students joined · {spotsLeft} spots left
                   </Text>
                 </View>
               )}
 
-              {/* Card Footer: Cost & Action */}
+              {/* Bottom Meta & Action Row */}
               <View style={styles.cardFooter}>
-                <View style={styles.metaRow}>
-                  <Clock size={13} color="#94A3B8" />
-                  <Text style={styles.metaText}>{session.durationHours} hrs</Text>
-                  <Text style={styles.metaDot}>•</Text>
-                  <Text style={styles.costText}>{session.durationHours} Credit(s)</Text>
+                <View style={styles.metaLeft}>
+                  <Clock size={13} color="#111827" style={{ marginRight: 5 }} />
+                  <Text style={styles.metaTimeCreditText}>
+                    {session.durationHours} hr{session.durationHours > 1 ? 's' : ''} · {session.durationHours} credit{session.durationHours > 1 ? 's' : ''}
+                  </Text>
                 </View>
 
-                {hasJoined ? (
-                  <View style={styles.joinedTag}>
-                    <Text style={styles.joinedTagText}>✓ Registered</Text>
-                  </View>
-                ) : isFull ? (
-                  <View style={styles.fullTag}>
-                    <Text style={styles.fullTagText}>Full</Text>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.joinBtn}
-                    onPress={() => handleJoinDirect(session)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.joinBtnText}>Join Event</Text>
-                  </TouchableOpacity>
-                )}
+                <View style={styles.joinActionRow}>
+                  <Text style={styles.joinActionText}>
+                    {isFull ? 'Full' : 'Join event'}
+                  </Text>
+                  {!isFull && <ArrowUpRight size={15} color="#111827" style={{ marginLeft: 2 }} />}
+                </View>
               </View>
             </TouchableOpacity>
           );
@@ -353,15 +359,15 @@ export const DiscoverScreen = ({ navigation }: any) => {
       <Modal visible={codeModalOpen} transparent animationType="fade">
         <View style={styles.modalBg}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Join with Private Code</Text>
+            <Text style={styles.modalTitle}>Enter Private Code</Text>
             <Text style={styles.modalSub}>
-              Enter the unique private invitation code (e.g. CAMP-XXXX) shared by the host:
+              Enter the unique private pass code (e.g. CAMP-XXXX) shared by the host:
             </Text>
 
             <TextInput
               style={styles.joinCodeInput}
               placeholder="CAMP-1234"
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#9CA3AF"
               value={joinCodeInput}
               onChangeText={setJoinCodeInput}
               autoCapitalize="characters"
@@ -400,359 +406,320 @@ export const DiscoverScreen = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#F8FAF9',
   },
   content: {
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingTop: 12,
     paddingBottom: 40,
   },
-  header: {
-    marginBottom: 16,
-  },
-  headerTitleRow: {
+  // Top bar (Page 1)
+  topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
+    alignItems: 'center',
+    marginBottom: 20,
   },
-  title: {
-    color: '#F8FAFC',
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    color: '#94A3B8',
-    fontSize: 12,
-    marginTop: 2,
-    lineHeight: 16,
-  },
-  codeQuickBtn: {
+  topProfileLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(251, 191, 36, 0.15)',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.3)',
-    marginLeft: 10,
   },
-  codeQuickBtnText: {
-    color: '#FBBF24',
-    fontSize: 12,
+  avatarCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#0E6245',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  avatarInitials: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 14,
+  },
+  topProfileName: {
+    color: '#111827',
+    fontSize: 15,
     fontWeight: '700',
   },
-  searchBar: {
+  enterCodeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: '#FEF7DA',
+    borderRadius: 18,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#FEF08A',
+  },
+  enterCodeText: {
+    color: '#854D0E',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  // Radar Header (Page 1)
+  headerSection: {
+    marginBottom: 16,
+  },
+  radarTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+  },
+  radarTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#111827',
+    letterSpacing: -0.5,
+  },
+  radarSubtitle: {
+    fontSize: 14,
+    color: '#5A6561',
+    marginTop: 4,
+    lineHeight: 20,
+  },
+  // Search bar (Page 1)
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+    marginBottom: 14,
   },
   searchInput: {
     flex: 1,
-    color: '#F8FAFC',
+    color: '#111827',
     fontSize: 14,
   },
+  // Filter chips (Page 1)
   filterChipRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 22,
   },
   filterChip: {
-    backgroundColor: '#1E293B',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    borderRadius: 20,
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   filterChipActive: {
-    backgroundColor: '#0369A1',
+    backgroundColor: '#18201D',
+  },
+  filterChipInactive: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
   },
   filterChipText: {
-    color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
   },
   filterChipTextActive: {
     color: '#FFFFFF',
     fontWeight: '700',
   },
+  filterChipTextInactive: {
+    color: '#1F2937',
+    fontWeight: '600',
+  },
+  // Section subheader
   sectionHeader: {
     marginBottom: 12,
   },
   sectionTitle: {
-    color: '#94A3B8',
     fontSize: 11,
     fontWeight: '800',
+    color: '#5A6561',
     letterSpacing: 0.8,
   },
+  // Session Cards (Page 1)
   sessionCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: 'rgba(0, 0, 0, 0.03)',
   },
-  cardHeader: {
+  cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
   },
-  formatBadge: {
+  capsuleBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-  },
-  formatTextMulti: {
-    color: '#C084FC',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  formatTextGroup: {
-    color: '#38BDF8',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  formatText1on1: {
-    color: '#34D399',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  locationBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-  },
-  locOnline: {
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-  },
-  locOffline: {
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-  },
-  locTextOnline: {
-    color: '#38BDF8',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  locTextOffline: {
-    color: '#F59E0B',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  locTextHybrid: {
-    color: '#A855F7',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  sessionTitle: {
-    color: '#F8FAFC',
-    fontSize: 17,
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  hostLine: {
-    color: '#94A3B8',
-    fontSize: 12,
-    marginBottom: 10,
-  },
-  dateTimeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0F172A',
-    borderRadius: 8,
-    paddingVertical: 7,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 4,
     paddingHorizontal: 10,
+  },
+  capsuleBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  cardTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 4,
+    letterSpacing: -0.3,
+  },
+  mentorText: {
+    fontSize: 13,
+    color: '#1F2937',
+    fontWeight: '500',
+    marginBottom: 12,
+  },
+  whiteCapsuleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     marginBottom: 8,
   },
-  dateTimeText: {
-    color: '#E2E8F0',
-    fontSize: 12,
+  whiteCapsuleText: {
+    fontSize: 13,
     fontWeight: '700',
-  },
-  capacityBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(168, 85, 247, 0.1)',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(168, 85, 247, 0.25)',
-  },
-  capacityText: {
-    color: '#CBD5E1',
-    fontSize: 12,
+    color: '#111827',
   },
   cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#334155',
-    paddingTop: 10,
+    marginTop: 6,
+    paddingTop: 8,
   },
-  metaRow: {
+  metaLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
   },
-  metaText: {
-    color: '#94A3B8',
-    fontSize: 12,
-  },
-  metaDot: {
-    color: '#64748B',
-    fontSize: 12,
-  },
-  costText: {
-    color: '#FBBF24',
-    fontSize: 12,
+  metaTimeCreditText: {
+    fontSize: 13,
     fontWeight: '700',
+    color: '#111827',
   },
-  joinBtn: {
-    backgroundColor: '#0284C7',
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-  },
-  joinBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  joinedTag: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderRadius: 8,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: '#10B981',
-  },
-  joinedTagText: {
-    color: '#10B981',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  fullTag: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderRadius: 8,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-  },
-  fullTagText: {
-    color: '#EF4444',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  emptyCard: {
+  joinActionRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
-    padding: 30,
+  },
+  joinActionText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  // Empty card
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
     marginTop: 10,
   },
   emptyTitle: {
-    color: '#F8FAFC',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 4,
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 6,
   },
   emptySub: {
-    color: '#64748B',
-    fontSize: 12,
+    fontSize: 13,
+    color: '#6B7280',
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 18,
     marginBottom: 16,
   },
   hostNowBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0284C7',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 10,
+    backgroundColor: '#0E6245',
+    borderRadius: 24,
+    paddingVertical: 11,
+    paddingHorizontal: 20,
   },
   hostNowText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
+  // Modal
   modalBg: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 24,
   },
   modalCard: {
     width: '100%',
-    maxWidth: 380,
-    backgroundColor: '#0F172A',
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: '#334155',
-    padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
   },
   modalTitle: {
-    color: '#F8FAFC',
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  modalSub: {
-    color: '#94A3B8',
-    fontSize: 12,
-    marginBottom: 16,
-    lineHeight: 16,
-  },
-  joinCodeInput: {
-    backgroundColor: '#1E293B',
-    borderRadius: 10,
-    padding: 14,
-    color: '#FBBF24',
     fontSize: 20,
     fontWeight: '800',
-    letterSpacing: 2,
-    textAlign: 'center',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  modalSub: {
+    fontSize: 13,
+    color: '#5A6561',
+    lineHeight: 18,
     marginBottom: 16,
+  },
+  joinCodeInput: {
+    backgroundColor: '#F8FAF9',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderWidth: 1,
-    borderColor: '#38BDF8',
+    borderColor: '#E2E8E5',
+    color: '#111827',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginBottom: 20,
   },
   modalBtnRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 10,
+    gap: 12,
   },
   cancelBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 20,
+    backgroundColor: '#F0F4F2',
+    alignItems: 'center',
   },
   cancelBtnText: {
-    color: '#94A3B8',
-    fontWeight: '600',
+    color: '#374151',
+    fontWeight: '700',
+    fontSize: 14,
   },
   confirmCodeBtn: {
-    backgroundColor: '#0284C7',
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 8,
+    flex: 2,
+    paddingVertical: 12,
+    borderRadius: 20,
+    backgroundColor: '#0E6245',
+    alignItems: 'center',
   },
   confirmCodeText: {
     color: '#FFFFFF',
     fontWeight: '700',
+    fontSize: 14,
   },
 });

@@ -17,6 +17,8 @@ import {
   LocationMode,
   SessionStatus,
   SessionType,
+  ParticipantRole,
+  ConfirmedBy,
 } from '@skill-exchange/shared-types';
 import {
   Clock,
@@ -41,10 +43,16 @@ import {
   UserCheck,
   Download,
   Play,
+  Square,
+  Zap,
+  ClipboardCheck,
+  ChevronLeft,
 } from 'lucide-react-native';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
-import { AvatarWithBadgeFrame } from '../../components/common/ThemeSystem';
+import { AvatarWithBadgeFrame, BrandUnderline } from '../../components/common/ThemeSystem';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { saveOrSharePng } from '../../services/exportImage';
 
 export const SessionDetailScreen = ({ route, navigation }: any) => {
   const initialSession: SessionDto = route.params?.session;
@@ -63,6 +71,10 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
   // Private joining code modal for student
   const [joinModalOpen, setJoinModalOpen] = useState(false);
   const [joinCodeInput, setJoinCodeInput] = useState('');
+
+  // Attendance verification modal (Present / Absent)
+  const [attendanceModalOpen, setAttendanceModalOpen] = useState(false);
+  const [attendanceState, setAttendanceState] = useState<{ [userId: string]: boolean }>({});
 
   // Post-session completion banner sharing modal with toggleable options
   const [shareBannerModalOpen, setShareBannerModalOpen] = useState(false);
@@ -90,12 +102,14 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
   };
 
   const isHost = session?.hostId === user?.id || session?.isHost;
+  const isCoMentor = Boolean(session?.mentors?.some((m) => m.mentorId === user?.id));
   const hasJoined = session?.hasJoined || session?.participants?.some((p) => p.userId === user?.id);
   const myParticipant = session?.participants?.find((p) => p.userId === user?.id);
   const myAttendanceConfirmed = session?.myAttendanceConfirmed || myParticipant?.attendanceConfirmed;
   const hasRated = session?.hasRated || (myParticipant?.rating !== null && myParticipant?.rating !== undefined);
-  const sessionCompleted = session?.status === SessionStatus.COMPLETED;
-  const sessionCancelled = session?.status === SessionStatus.CANCELLED;
+  const sessionCompleted = session?.status === SessionStatus.COMPLETED || (session?.status as any) === 'completed';
+  const sessionCancelled = session?.status === SessionStatus.CANCELLED || (session?.status as any) === 'cancelled';
+  const sessionNoShow = session?.status === SessionStatus.NO_SHOW || (session?.status as any) === 'no_show';
 
   // Timing logic
   const scheduledTime = new Date(session.scheduledAt).getTime();
@@ -104,6 +118,34 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
   const now = Date.now();
   const hasStarted = now >= scheduledTime;
   const hasEnded = now >= endTime;
+
+  // 1-on-1 Pending and Attendance logic
+  const isOneToOne = session?.sessionType === SessionType.ONE_TO_ONE;
+  const hasAcceptedOneToOne =
+    myParticipant?.confirmedBy === ConfirmedBy.SELF ||
+    (myParticipant as any)?.confirmed_by === 'self' ||
+    myParticipant?.attendanceConfirmed;
+
+  const isOneToOnePending = Boolean(
+    isOneToOne &&
+      !isHost &&
+      (session?.status === SessionStatus.SCHEDULED || (session?.status as any) === 'scheduled') &&
+      !hasAcceptedOneToOne &&
+      (hasJoined || Boolean(myParticipant))
+  );
+
+  const myMentorInvite = session?.mentors?.find((m) => m.mentorId === user?.id || (m as any).userId === user?.id);
+  const isMentorInvitedPending =
+    session?.mentorInviteStatus === 'pending' ||
+    myMentorInvite?.status === 'pending';
+
+  const isAttendanceReviewNeeded = Boolean(
+    (isHost || isCoMentor) &&
+      !sessionCompleted &&
+      !sessionCancelled &&
+      !sessionNoShow &&
+      (hasEnded || (session?.status as any) === 'in_progress')
+  );
 
   // Capacity calculations
   const maxCap = session.maxParticipants || 15;
@@ -231,6 +273,83 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
     );
   };
 
+  // Open Attendance Review Modal
+  const openAttendanceModal = () => {
+    const initialAttendance: { [userId: string]: boolean } = {};
+    const learners = session?.participants?.filter((p) => p.role === ParticipantRole.LEARNER) || [];
+    learners.forEach((p) => {
+      initialAttendance[p.userId] = p.attendanceConfirmed !== undefined ? p.attendanceConfirmed : true;
+    });
+    setAttendanceState(initialAttendance);
+    setAttendanceModalOpen(true);
+  };
+
+  // Finalize attendance and settle session
+  const handleFinalizeAttendance = async () => {
+    try {
+      setActionLoading(true);
+      const attendanceList = Object.entries(attendanceState).map(([userId, attended]) => ({
+        userId,
+        attended,
+      }));
+      const res = await api.concludeSession(session.id, attendanceList);
+      setAttendanceModalOpen(false);
+      await fetchSessionDetails();
+      Alert.alert(
+        'Session Concluded & Settled! 🎉',
+        (res.message || 'Learner attendance verified and credits settled.') +
+          '\n\nWould you like to generate and share your event completion pass?',
+        [
+          { text: 'Share Event Banner', onPress: () => setShareBannerModalOpen(true) },
+          { text: 'Done', style: 'cancel' },
+        ]
+      );
+    } catch (err: any) {
+      Alert.alert('Notice', err.message || 'Could not conclude session with attendance.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Host / Mentor: Stop Session Early (Opens Attendance Review)
+  const handleStopEarly = () => {
+    Alert.alert(
+      'End Session Early? 🛑',
+      'Ending early will conclude the meeting. You will now review learner attendance (Present / Absent) before final credit settlement.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Review Attendance',
+          onPress: () => openAttendanceModal(),
+        },
+      ]
+    );
+  };
+
+  // Host: Complete & Settle (Opens Attendance Review)
+  const handleCompleteSession = () => {
+    openAttendanceModal();
+  };
+
+  // 1-on-1 Student Response (Accept / Decline)
+  const handleOneToOneResponse = async (accept: boolean) => {
+    try {
+      setActionLoading(true);
+      const res = await api.respondToMentorRequest(session.id, accept);
+      Alert.alert(
+        accept ? 'Mentorship Session Confirmed! 🎓' : 'Invitation Declined',
+        accept
+          ? 'You accepted this 1-on-1 session. It is now officially scheduled on your calendar!'
+          : 'You declined the 1-on-1 mentorship session.'
+      );
+      fetchSessionDetails();
+    } catch (err: any) {
+      Alert.alert('Notice', err.message || 'Could not update response.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // Host: Public Announcement
   const handleAnnounce = async () => {
     try {
@@ -245,32 +364,6 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
       fetchSessionDetails();
     } catch (err: any) {
       Alert.alert('Announcement Notice', err.message || 'Announcement broadcasted to campus.');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  // Host: Complete & Settle
-  const handleCompleteSession = async () => {
-    try {
-      setActionLoading(true);
-      const res = await api.completeSession(session.id);
-      fetchSessionDetails();
-      Alert.alert(
-        'Session Finalized!',
-        (res.message || 'Credit settlement complete! Earnings distributed to host/mentors.') +
-          '\n\nWould you like to share the event completion banner to showcase your session?',
-        [
-          {
-            text: 'Share Event Banner',
-            onPress: () => setShareBannerModalOpen(true),
-          },
-          { text: 'Done', style: 'cancel' },
-        ]
-      );
-    } catch (err: any) {
-      Alert.alert('Session Settled', 'Payout settled per credit economy engine.');
-      setShareBannerModalOpen(true);
     } finally {
       setActionLoading(false);
     }
@@ -311,618 +404,592 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
     }
   };
 
-  // Generate and download a genuine .png image of the event banner pass
-  const handleDownloadBannerPng = () => {
-    if (typeof document === 'undefined') {
-      Alert.alert('Banner Download', `Generating banner for "${session.title || session.skillName}"`);
-      return;
-    }
-
+  // Generate and download a genuine real .png image of the event banner pass
+  const handleDownloadBannerPng = async () => {
     try {
-      const canvas = document.createElement('canvas');
-      canvas.width = 900;
-      canvas.height = 700;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+      setActionLoading(true);
+      const res = await api.exportBannerPng({
+        sessionId: session.id,
+        title: session.title || session.skillName,
+        skillName: session.skillName,
+        sessionType: session.sessionType,
+        hostName: session.hostName,
+        hostUsername: session.hostUsername,
+        scheduledAt: session.scheduledAt,
+        durationHours: session.durationHours,
+        locationMode: session.locationMode,
+        meetingLink: session.meetingLink,
+        locationAddress: session.locationAddress,
+        skillsTags: session.skillsTags,
+        showCredit,
+        showLocation,
+        showDateTime,
+        showHostTag,
+        showSkills,
+      });
 
-      // Background gradient
-      const gradient = ctx.createLinearGradient(0, 0, 900, 700);
-      gradient.addColorStop(0, '#090D1A');
-      gradient.addColorStop(0.5, '#0F172A');
-      gradient.addColorStop(1, '#0B132B');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, 900, 700);
-
-      // Outer border
-      ctx.strokeStyle = '#38BDF8';
-      ctx.lineWidth = 4;
-      ctx.strokeRect(20, 20, 860, 660);
-
-      // Top accent bar
-      ctx.fillStyle = '#0284C7';
-      ctx.fillRect(20, 20, 860, 12);
-
-      // Header Badge
-      ctx.fillStyle = '#0369A1';
-      ctx.fillRect(50, 50, 320, 32);
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 12px sans-serif';
-      ctx.fillText('🎓 SKILLJECTORY EVENT PASS', 70, 71);
-
-      // Format pill
-      const typeLabel =
-        session.sessionType === SessionType.MULTI_MENTOR
-          ? 'MULTI-HOST WORKSHOP'
-          : session.sessionType === SessionType.GROUP
-          ? 'GROUP WORKSHOP'
-          : '1-ON-1 MENTORSHIP';
-      ctx.fillStyle = '#1E293B';
-      ctx.fillRect(610, 50, 240, 32);
-      ctx.strokeStyle = '#38BDF8';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(610, 50, 240, 32);
-      ctx.fillStyle = '#38BDF8';
-      ctx.font = 'bold 12px sans-serif';
-      ctx.fillText(typeLabel, 630, 71);
-
-      // Event Title
-      ctx.fillStyle = '#F8FAFC';
-      ctx.font = 'bold 28px sans-serif';
-      const eventTitle = session.title || session.skillName;
-      ctx.fillText(eventTitle, 50, 130);
-
-      let curY = 165;
-
-      // Host row
-      if (showHostTag) {
-        ctx.fillStyle = '#1E293B';
-        ctx.fillRect(50, curY, 800, 54);
-        ctx.strokeStyle = '#334155';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(50, curY, 800, 54);
-
-        ctx.fillStyle = '#94A3B8';
-        ctx.font = '11px sans-serif';
-        ctx.fillText('ORGANIZED BY', 70, curY + 22);
-
-        ctx.fillStyle = '#F8FAFC';
-        ctx.font = 'bold 16px sans-serif';
-        const hostDisplayName = session.hostName || 'Host';
-        ctx.fillText(hostDisplayName, 70, curY + 42);
-
-        ctx.fillStyle = '#38BDF8';
-        ctx.font = 'bold 14px sans-serif';
-        ctx.fillText(`@${session.hostUsername || 'host'}`, 70 + ctx.measureText(hostDisplayName).width + 12, curY + 42);
-
-        curY += 72;
+      if (res?.pngBase64) {
+        await saveOrSharePng(
+          res.pngBase64,
+          res.fileName || `SkillJectory_Pass_${session.skillName}.png`,
+          'Save SkillJectory Event Banner (.png)'
+        );
+      } else {
+        throw new Error('Could not generate PNG data from server');
       }
-
-      // Skills & Tags
-      if (showSkills) {
-        let sx = 50;
-        const allTags = [session.skillName, ...(session.skillsTags || [])];
-        allTags.slice(0, 5).forEach((tag, idx) => {
-          const tagText = idx === 0 ? tag : `#${tag}`;
-          const tagWidth = ctx.measureText(tagText).width + 30;
-          ctx.fillStyle = idx === 0 ? 'rgba(56, 189, 248, 0.2)' : '#1E293B';
-          ctx.fillRect(sx, curY, tagWidth, 32);
-          ctx.strokeStyle = idx === 0 ? '#38BDF8' : '#334155';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(sx, curY, tagWidth, 32);
-
-          ctx.fillStyle = idx === 0 ? '#38BDF8' : '#CBD5E1';
-          ctx.font = 'bold 13px sans-serif';
-          ctx.fillText(tagText, sx + 15, curY + 21);
-          sx += tagWidth + 10;
-        });
-        curY += 50;
-      }
-
-      // Divider
-      ctx.strokeStyle = '#1E293B';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(50, curY);
-      ctx.lineTo(850, curY);
-      ctx.stroke();
-      curY += 30;
-
-      // Scheduled Date & Time
-      const scheduledDateObjLocal = new Date(session.scheduledAt);
-      if (showDateTime) {
-        ctx.fillStyle = '#94A3B8';
-        ctx.font = '12px sans-serif';
-        ctx.fillText('SCHEDULED DATE & TIME', 50, curY);
-        ctx.fillStyle = '#F8FAFC';
-        ctx.font = 'bold 16px sans-serif';
-        const dateStr = `${scheduledDateObjLocal.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} at ${scheduledDateObjLocal.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • ${session.durationHours} Hours`;
-        ctx.fillText(dateStr, 50, curY + 24);
-        curY += 55;
-      }
-
-      // Location
-      if (showLocation) {
-        ctx.fillStyle = '#94A3B8';
-        ctx.font = '12px sans-serif';
-        ctx.fillText('LOCATION / PLATFORM', 50, curY);
-        ctx.fillStyle = '#F8FAFC';
-        ctx.font = 'bold 15px sans-serif';
-        const locStr = session.locationMode === LocationMode.ONLINE
-          ? `Online: ${session.meetingLink || 'Meeting Link Provided'}`
-          : (session.locationAddress || 'Campus Center');
-        ctx.fillText(locStr, 50, curY + 22);
-        curY += 50;
-      }
-
-      // Credit
-      if (showCredit) {
-        ctx.fillStyle = '#10B981';
-        ctx.font = 'bold 16px sans-serif';
-        ctx.fillText(`💰 Time-Credit Value: ${session.durationHours} Credit(s)`, 50, curY + 10);
-      }
-
-      // Footer
-      ctx.fillStyle = '#64748B';
-      ctx.font = '12px sans-serif';
-      ctx.fillText('Assam Down Town University • SkillJectory Campus Exchange', 50, 650);
-
-      const dataUrl = canvas.toDataURL('image/png');
-      const a = document.createElement('a');
-      a.href = dataUrl;
-      const cleanFileName = (eventTitle || 'event').replace(/[^a-zA-Z0-9]/g, '_');
-      a.download = `SkillJectory_Event_${cleanFileName}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-
-      Alert.alert('Banner Downloaded!', 'Event banner PNG image downloaded.');
     } catch (err: any) {
+      // Fallback: client-side canvas generation if on web
+      if (typeof document !== 'undefined') {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 1200;
+          canvas.height = 750;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, 1200, 750);
+            ctx.strokeStyle = '#0E6245';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(20, 20, 1160, 710);
+            ctx.fillStyle = '#0E6245';
+            ctx.fillRect(20, 20, 1160, 24);
+            ctx.fillStyle = '#111827';
+            ctx.font = 'bold 36px sans-serif';
+            ctx.fillText(session.title || session.skillName, 50, 140);
+            const fallbackDataUrl = canvas.toDataURL('image/png');
+            await saveOrSharePng(fallbackDataUrl, `SkillJectory_Pass_${session.skillName}.png`, 'Save Event Banner');
+            return;
+          }
+        } catch {}
+      }
       Alert.alert('Notice', err.message || 'Could not export banner PNG');
+    } finally {
+      setActionLoading(false);
     }
   };
 
   const handleShareBanner = async () => {
-    const scheduledDate = new Date(session.scheduledAt);
-    let shareText = `🎓 ${session.title || session.skillName}\n`;
-    if (showHostTag) {
-      shareText += `Hosted by: ${session.hostName} (@${session.hostUsername || 'host'})\n`;
-    }
-    if (showDateTime) {
-      shareText += `📅 ${scheduledDate.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} at ${scheduledDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${session.durationHours} hrs)\n`;
-    }
-    if (showLocation) {
-      shareText += `📍 ${session.locationMode === LocationMode.ONLINE ? `Online: ${session.meetingLink || 'Link provided upon registration'}` : (session.locationAddress || 'Campus Hall')}\n`;
-    }
-    if (showCredit) {
-      shareText += `💰 Time-Credit: ${session.durationHours} Credit(s)\n`;
-    }
-    if (showSkills && session.skillsTags?.length) {
-      shareText += `🏷️ Skills: ${session.skillsTags.join(', ')}\n`;
-    }
-    shareText += `\nJoin on SkillJectory Campus Exchange!`;
-
     try {
-      await Share.share({
+      setActionLoading(true);
+      const res = await api.exportBannerPng({
+        sessionId: session.id,
         title: session.title || session.skillName,
-        message: shareText,
+        skillName: session.skillName,
+        sessionType: session.sessionType,
+        hostName: session.hostName,
+        hostUsername: session.hostUsername,
+        scheduledAt: session.scheduledAt,
+        durationHours: session.durationHours,
+        locationMode: session.locationMode,
+        meetingLink: session.meetingLink,
+        locationAddress: session.locationAddress,
+        skillsTags: session.skillsTags,
+        showCredit,
+        showLocation,
+        showDateTime,
+        showHostTag,
+        showSkills,
       });
+
+      if (res?.pngBase64) {
+        await saveOrSharePng(
+          res.pngBase64,
+          res.fileName || `SkillJectory_Pass_${session.skillName}.png`,
+          `Share ${session.title || session.skillName} Pass (.png)`
+        );
+      } else {
+        // Fallback to text share
+        const scheduledDate = new Date(session.scheduledAt);
+        await Share.share({
+          title: session.title || session.skillName,
+          message: `🎓 ${session.title || session.skillName}\nHosted by: ${session.hostName} (@${session.hostUsername || 'host'})\nJoin on SkillJectory Campus Exchange!`,
+        });
+      }
     } catch (err: any) {
       Alert.alert('Share', err.message || 'Share cancelled');
+    } finally {
+      setActionLoading(false);
     }
   };
-
-  // Check if current user is an invited co-host with pending status
-  const myMentorInvite = session.mentors?.find((m) => m.mentorId === user?.id || (m as any).userId === user?.id);
-  const isMentorInvitedPending =
-    session.mentorInviteStatus === 'pending' ||
-    myMentorInvite?.status === 'pending';
 
   const scheduledDateObj = new Date(session.scheduledAt);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Session Cancelled Banner */}
-      {sessionCancelled && (
-        <View style={styles.cancelledBanner}>
-          <AlertOctagon size={18} color="#EF4444" style={{ marginRight: 6 }} />
-          <Text style={styles.cancelledText}>This event has been cancelled by the host.</Text>
-        </View>
-      )}
-
-      {/* Co-Host Request Banner (if invited and pending) */}
-      {isMentorInvitedPending && (
-        <View style={styles.coHostInviteBanner}>
-          <View style={styles.coHostInviteHeader}>
-            <Sparkles size={18} color="#F59E0B" style={{ marginRight: 6 }} />
-            <Text style={styles.coHostInviteTitle}>CO-HOST INVITATION REQUEST</Text>
-          </View>
-          <Text style={styles.coHostInviteDesc}>
-            {session.hostName} (@{session.hostUsername || 'host'}) invited you to co-host this session.
-          </Text>
-          <View style={styles.coHostActionRow}>
-            <TouchableOpacity
-              style={styles.acceptCoHostBtn}
-              onPress={() => handleMentorResponse(true)}
-              disabled={actionLoading}
-            >
-              <Check size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.acceptCoHostText}>Accept Invitation</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.declineCoHostBtn}
-              onPress={() => handleMentorResponse(false)}
-              disabled={actionLoading}
-            >
-              <UserX size={16} color="#EF4444" style={{ marginRight: 4 }} />
-              <Text style={styles.declineCoHostText}>Decline</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {/* Main Event Header Card */}
-      <View style={styles.headerCard}>
-        <View style={styles.topBadgeRow}>
-          <Text style={styles.formatTag}>
-            {session.sessionType === SessionType.MULTI_MENTOR
-              ? 'MULTI-HOST WORKSHOP'
-              : session.sessionType === SessionType.GROUP
-              ? 'GROUP WORKSHOP'
-              : '1-ON-1 MENTORING'}
-          </Text>
-
-          {session.isPrivate ? (
-            <View style={styles.privateBadge}>
-              <Lock size={12} color="#FBBF24" style={{ marginRight: 4 }} />
-              <Text style={styles.privateBadgeText}>PRIVATE</Text>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAF9' }} edges={['top', 'left', 'right']}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Top Header Bar (Artboard Pages 17 & 18) */}
+        <View style={styles.topHeaderBar}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.7}>
+            <ChevronLeft size={24} color="#111827" />
+          </TouchableOpacity>
+          <View style={styles.headerTitleWrap}>
+            <Text style={styles.headerTitle}>Session </Text>
+            <View style={{ alignItems: 'center' }}>
+              <Text style={styles.headerTitle}>details</Text>
+              <BrandUnderline width={68} style={{ marginTop: 2 }} />
             </View>
-          ) : (
-            <View style={styles.publicBadge}>
-              <Globe size={12} color="#38BDF8" style={{ marginRight: 4 }} />
-              <Text style={styles.publicBadgeText}>PUBLIC</Text>
-            </View>
-          )}
+          </View>
+          <View style={{ width: 24 }} />
         </View>
 
-        {/* Custom Event Title */}
-        <Text style={styles.eventCustomTitle}>
-          {session.title || session.skillName}
-        </Text>
-
-        {/* Primary Skill Tag Chip */}
-        <View style={styles.primarySkillChip}>
-          <Tag size={13} color="#38BDF8" style={{ marginRight: 6 }} />
-          <Text style={styles.primarySkillText}>{session.skillName}</Text>
-        </View>
-
-        {/* Multiple Skills Tags (up to 6) */}
-        {session.skillsTags && session.skillsTags.length > 0 && (
-          <View style={styles.tagsContainer}>
-            {session.skillsTags.map((tag, idx) => (
-              <View key={idx} style={styles.tagChip}>
-                <Text style={styles.tagChipText}>#{tag}</Text>
-              </View>
-            ))}
+        {/* Session Cancelled Banner */}
+        {sessionCancelled && (
+          <View style={styles.cancelledBanner}>
+            <AlertOctagon size={18} color="#EF4444" style={{ marginRight: 6 }} />
+            <Text style={styles.cancelledText}>This event has been cancelled by the host.</Text>
           </View>
         )}
 
-        {/* Custom Event Description */}
-        {session.description ? (
-          <Text style={styles.eventDescriptionText}>{session.description}</Text>
-        ) : null}
+        {/* ACTION REQUIRED: Co-Host Invitation Request (for invited mentor) */}
+        {isMentorInvitedPending && (
+          <View style={styles.actionRequiredCard}>
+            <View style={styles.actionRequiredHeader}>
+              <View style={styles.actionRequiredBadge}>
+                <Zap size={13} color="#854D0E" style={{ marginRight: 4 }} />
+                <Text style={styles.actionRequiredBadgeText}>ACTION REQUIRED</Text>
+              </View>
+              <Text style={styles.actionRequiredTitle}>Co-Host Invitation Request</Text>
+            </View>
+            <Text style={styles.actionRequiredDesc}>
+              {session.hostName} (@{session.hostUsername || 'host'}) invited you to co-host this workshop. Upfront fee of 1.5 credits will be reserved upon acceptance.
+            </Text>
+            <View style={styles.actionRequiredBtnRow}>
+              <TouchableOpacity
+                style={styles.actionPrimaryBtn}
+                onPress={() => handleMentorResponse(true)}
+                disabled={actionLoading}
+              >
+                <Check size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.actionBtnText}>Accept Co-Host Role</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionSecondaryBtn}
+                onPress={() => handleMentorResponse(false)}
+                disabled={actionLoading}
+              >
+                <UserX size={16} color="#DC2626" style={{ marginRight: 4 }} />
+                <Text style={styles.actionSecondaryText}>Decline</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
-        {/* 1-on-1 Target Learner Display */}
-        {session.sessionType === SessionType.ONE_TO_ONE && session.targetLearnerName ? (
-          <View style={styles.targetLearnerBox}>
-            <UserCheck size={14} color="#10B981" style={{ marginRight: 6 }} />
-            <Text style={styles.targetLearnerText}>
-              1-on-1 Session with:{' '}
-              <Text style={{ fontWeight: '800', color: '#F8FAFC' }}>
-                {session.targetLearnerName}
-              </Text>
+        {/* ACTION REQUIRED: 1-on-1 Mentorship Request (for invited learner) */}
+        {isOneToOnePending && (
+          <View style={styles.actionRequiredCard}>
+            <View style={styles.actionRequiredHeader}>
+              <View style={styles.actionRequiredBadge}>
+                <Zap size={13} color="#854D0E" style={{ marginRight: 4 }} />
+                <Text style={styles.actionRequiredBadgeText}>ACTION REQUIRED</Text>
+              </View>
+              <Text style={styles.actionRequiredTitle}>1-on-1 Mentorship Invitation</Text>
+            </View>
+            <Text style={styles.actionRequiredDesc}>
+              {session.hostName} (@{session.hostUsername || 'mentor'}) requested a 1-on-1 mentorship session with you for "{session.title || session.skillName}".
             </Text>
+            <View style={styles.actionRequiredBtnRow}>
+              <TouchableOpacity
+                style={styles.actionPrimaryBtn}
+                onPress={() => handleOneToOneResponse(true)}
+                disabled={actionLoading}
+              >
+                <Check size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.actionBtnText}>Accept Session 🎓</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionSecondaryBtn}
+                onPress={() => handleOneToOneResponse(false)}
+                disabled={actionLoading}
+              >
+                <UserX size={16} color="#DC2626" style={{ marginRight: 4 }} />
+                <Text style={styles.actionSecondaryText}>Decline</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        ) : null}
+        )}
 
-        {/* Host Identification Card */}
-        <View style={styles.hostIdentifierCard}>
-          <AvatarWithBadgeFrame
-            name={session.hostName}
-            size={46}
-          />
-          <View style={{ marginLeft: 12, flex: 1 }}>
-            <Text style={styles.hostRealName}>
-              {session.hostName}{' '}
-              {isHost ? (
-                <Text style={{ color: '#38BDF8', fontSize: 12 }}>(You)</Text>
-              ) : null}
+        {/* ACTION REQUIRED: Host Attendance Review (when session ended or in progress) */}
+        {isAttendanceReviewNeeded && (
+          <View style={styles.actionRequiredCard}>
+            <View style={styles.actionRequiredHeader}>
+              <View style={styles.actionRequiredBadge}>
+                <Zap size={13} color="#854D0E" style={{ marginRight: 4 }} />
+                <Text style={styles.actionRequiredBadgeText}>ACTION REQUIRED</Text>
+              </View>
+              <Text style={styles.actionRequiredTitle}>Review Learner Attendance</Text>
+            </View>
+            <Text style={styles.actionRequiredDesc}>
+              The meeting has concluded. Please select whether each learner was Present or Absent before final credit settlement and host earnings payout.
             </Text>
-            <Text style={styles.hostUsernameText}>
-              @{session.hostUsername || 'host'}
-            </Text>
+            <TouchableOpacity
+              style={[styles.actionPrimaryBtn, { marginTop: 10 }]}
+              onPress={openAttendanceModal}
+              disabled={actionLoading}
+            >
+              <ClipboardCheck size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.actionBtnText}>Review Attendance (Present / Absent) 📋</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.hostRoleBadge}>
-            <Text style={styles.hostRoleBadgeText}>Primary Host</Text>
+        )}
+
+        {/* SESSION STATE DISPLAY (When no action is required from the user) */}
+        {!isMentorInvitedPending && !isOneToOnePending && !isAttendanceReviewNeeded && !sessionCancelled && (
+          <View style={styles.sessionStateCard}>
+            <View style={styles.sessionStateRow}>
+              {sessionCompleted ? (
+                <>
+                  <CheckCircle size={20} color="#0E6245" style={{ marginRight: 10 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.sessionStateTitle, { color: '#0E6245' }]}>Concluded & Settled ✓</Text>
+                    <Text style={styles.sessionStateSubtext}>
+                      Attendance was verified and credit settlement has been completed.
+                    </Text>
+                  </View>
+                </>
+              ) : sessionNoShow ? (
+                <>
+                  <AlertOctagon size={20} color="#DC2626" style={{ marginRight: 10 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.sessionStateTitle, { color: '#DC2626' }]}>Concluded (No-Show)</Text>
+                    <Text style={styles.sessionStateSubtext}>Minimum confirmed attendance was not reached.</Text>
+                  </View>
+                </>
+              ) : (session.status === SessionStatus.IN_PROGRESS || (session.status as any) === 'in_progress') ? (
+                <>
+                  <Play size={20} color="#0E6245" style={{ marginRight: 10 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.sessionStateTitle, { color: '#0E6245' }]}>Live Session In Progress 🟢</Text>
+                    <Text style={styles.sessionStateSubtext}>Session is currently active. Connect with attendees.</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Calendar size={20} color="#0E6245" style={{ marginRight: 10 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sessionStateTitle}>
+                      {isHost
+                        ? (isOneToOne && !session.learnerAccepted
+                            ? `Awaiting Student Acceptance (@${session.targetLearnerName?.split('@')[1]?.replace(')', '') || 'student'})`
+                            : 'Scheduled Event')
+                        : (hasJoined ? 'Confirmed Attendee • Scheduled' : 'Open Registration')}
+                    </Text>
+                    <Text style={styles.sessionStateSubtext}>
+                      {hasStarted
+                        ? 'Scheduled start time reached'
+                        : `Starts on ${new Date(session.scheduledAt).toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${new Date(session.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                    </Text>
+                  </View>
+                </>
+              )}
+            </View>
           </View>
+        )}
+
+      {/* Top Badges Row (Artboard Pages 17 & 18) */}
+      <View style={styles.topBadgeRow}>
+        <View style={styles.formatTag}>
+          <Text style={styles.formatTagText}>
+            {session.sessionType === SessionType.ONE_TO_ONE
+              ? '1-ON-1'
+              : session.sessionType === SessionType.MULTI_MENTOR
+              ? 'MULTI-HOST'
+              : 'GROUP'}
+          </Text>
         </View>
 
-        {/* Multi-Host Co-Mentors List */}
-        {session.sessionType === SessionType.MULTI_MENTOR && session.mentors && session.mentors.length > 0 && (
-          <View style={styles.coMentorsSection}>
-            <Text style={styles.coMentorsSectionTitle}>CO-HOST MENTORS</Text>
-            {session.mentors.map((m) => (
-              <View key={m.mentorId || (m as any).userId} style={styles.coMentorRow}>
-                <AvatarWithBadgeFrame name={m.name} size={32} />
-                <View style={{ marginLeft: 10, flex: 1 }}>
-                  <Text style={styles.coMentorRealName}>{m.name}</Text>
-                  <Text style={styles.coMentorUsername}>@{m.username || 'mentor'}</Text>
+        {session.isPrivate && (
+          <View style={styles.privateBadge}>
+            <Lock size={12} color="#854D0E" style={{ marginRight: 4 }} />
+            <Text style={styles.privateBadgeText}>PRIVATE</Text>
+          </View>
+        )}
+
+        {/* Skill Tag Pills */}
+        <View style={styles.formatTag}>
+          <Text style={styles.formatTagText}>#{session.skillName}</Text>
+        </View>
+
+        {session.skillsTags && session.skillsTags.slice(0, 2).map((tag, idx) => (
+          <View key={idx} style={styles.formatTag}>
+            <Text style={styles.formatTagText}>#{tag}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Event Title & Subtitle */}
+      <Text style={styles.eventCustomTitle}>
+        {session.title || session.skillName}
+      </Text>
+      {session.description ? (
+        <Text style={styles.eventDescSubtitle}>{session.description}</Text>
+      ) : null}
+
+      {/* 1-on-1 Target Learner Banner (Artboard Page 17) */}
+      {session.sessionType === SessionType.ONE_TO_ONE && (
+        <View style={styles.learnerBannerMint}>
+          <UserCheck size={16} color="#0E6245" style={{ marginRight: 8 }} />
+          <Text style={styles.learnerBannerText}>
+            1-on-1 Session with:{' '}
+            <Text style={{ fontWeight: '800' }}>
+              {session.targetLearnerName || (session.participants?.find((p) => p.userId !== session.hostId)?.name || 'Chiranjib Das (@chira)')}
+            </Text>
+          </Text>
+        </View>
+      )}
+
+      {/* Host Identifier Card (Artboard Pages 17 & 18) */}
+      <View style={styles.hostCardWhite}>
+        <View style={styles.hostAvatarCA}>
+          <Text style={styles.hostAvatarText}>CA</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.hostCardName}>
+            {session.hostName} {isHost ? '(You)' : ''}
+          </Text>
+          <Text style={styles.hostCardUsername}>
+            @{session.hostUsername || 'admin'}
+          </Text>
+        </View>
+        <View style={styles.primaryHostPill}>
+          <Text style={styles.primaryHostText}>Primary Host</Text>
+        </View>
+      </View>
+
+      {/* Co-Hosts (Multi-Mentor Sessions, Artboard Page 18) */}
+      {session.mentors && session.mentors.length > 0 && (
+        <View style={styles.coMentorsWrap}>
+          {session.mentors.map((m: any, idx: number) => {
+            const isAccepted = m.status === 'accepted';
+            return (
+              <View key={idx} style={styles.coMentorCardWhite}>
+                <View style={[styles.hostAvatarCA, { backgroundColor: isAccepted ? '#0E6245' : '#D97706' }]}>
+                  <Text style={styles.hostAvatarText}>
+                    {m.name ? m.name.substring(0, 2).toUpperCase() : 'CO'}
+                  </Text>
                 </View>
-                <View
-                  style={[
-                    styles.coMentorStatusPill,
-                    m.status === 'accepted' ? styles.statusPillAccepted : styles.statusPillPending,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.coMentorStatusPillText,
-                      m.status === 'accepted' ? styles.statusPillAcceptedText : styles.statusPillPendingText,
-                    ]}
-                  >
-                    {m.status === 'accepted' ? '✓ Co-Host' : '⏳ Invite Sent'}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.hostCardName}>{m.name || m.username}</Text>
+                  {m.username && <Text style={styles.hostCardUsername}>@{m.username}</Text>}
+                </View>
+                <View style={[styles.primaryHostPill, { backgroundColor: isAccepted ? '#EBF7F0' : '#FEF7DA' }]}>
+                  <Text style={[styles.primaryHostText, { color: isAccepted ? '#0E6245' : '#854D0E' }]}>
+                    {isAccepted ? 'Co-Host' : 'Invite Pending'}
                   </Text>
                 </View>
               </View>
-            ))}
-          </View>
-        )}
-      </View>
+            );
+          })}
+        </View>
+      )}
 
-      {/* Date, Time & Group Capacity Card */}
-      <View style={styles.infoCard}>
-        <View style={styles.infoRow}>
-          <Calendar size={18} color="#38BDF8" />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.infoLabel}>Date & Time</Text>
-            <Text style={styles.infoVal}>
-              {scheduledDateObj.toLocaleDateString([], {
-                weekday: 'short',
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-              })}{' '}
-              at{' '}
-              {scheduledDateObj.toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </Text>
+      {/* Date & Time Card (Artboard Lavender Card, Pages 17 & 18) */}
+      <View style={styles.dateTimeCardLavender}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Calendar size={18} color="#0E6245" style={{ marginRight: 10 }} />
+            <View>
+              <Text style={styles.cardSectionLabelMuted}>Date & Time</Text>
+              <Text style={styles.cardBoldText}>
+                {scheduledDateObj.toLocaleDateString([], {
+                  weekday: 'short',
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })}{' '}
+                at{' '}
+                {scheduledDateObj.toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </Text>
+            </View>
           </View>
-          <View style={[styles.timeStatusBadge, hasEnded ? styles.statusEnded : hasStarted ? styles.statusLive : styles.statusUpcoming]}>
-            <Text style={styles.timeStatusText}>
-              {hasEnded ? 'Ended' : hasStarted ? 'In Progress' : 'Upcoming'}
+          <View style={[styles.statusPillCapsule, !hasEnded && styles.statusPillCapsuleDark]}>
+            <Text style={[styles.statusPillText, !hasEnded && styles.statusPillTextDark]}>
+              {hasEnded ? 'Ended' : hasStarted ? 'Live' : 'Upcoming'}
             </Text>
           </View>
         </View>
 
-        {/* Group Capacity Counter */}
+        {/* Group Capacity Counter on Page 18 */}
         {session.sessionType !== SessionType.ONE_TO_ONE && (
-          <View style={[styles.infoRow, { marginTop: 12, borderTopWidth: 1, borderTopColor: '#1E293B', paddingTop: 12 }]}>
-            <Users size={18} color="#A855F7" />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.infoLabel}>Student Capacity</Text>
-              <Text style={styles.infoVal}>
-                <Text style={{ color: '#A855F7', fontWeight: '800' }}>{currentCount}</Text> of{' '}
-                <Text style={{ color: '#F8FAFC' }}>{maxCap}</Text> students joined
-              </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.06)' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Users size={18} color="#7C3AED" style={{ marginRight: 10 }} />
+              <View>
+                <Text style={styles.cardSectionLabelMuted}>Student Capacity</Text>
+                <Text style={styles.cardBoldText}>
+                  {currentCount} of {maxCap} students joined
+                </Text>
+              </View>
             </View>
-            <View style={[styles.spotsBadge, isFull ? styles.spotsFull : styles.spotsOpen]}>
-              <Text style={styles.spotsText}>
-                {isFull ? 'Full (0 spots left)' : `${spotsLeft} spots left`}
+            <View style={styles.statusPillCapsule}>
+              <Text style={styles.statusPillText}>
+                {spotsLeft} spots left
               </Text>
             </View>
           </View>
         )}
 
-        {/* Private Join Code Display (Visible to Host or Joined Students) */}
+        {/* Private Code on Page 18 */}
         {session.isPrivate && session.joinCode && (
-          <View style={styles.joinCodeBox}>
-            <KeyRound size={16} color="#FBBF24" style={{ marginRight: 6 }} />
-            <Text style={styles.joinCodePrompt}>Private Code: </Text>
-            <Text style={styles.joinCodeText} selectable>
-              {session.joinCode}
-            </Text>
+          <View style={styles.privateCodeBoxYellow}>
+            <KeyRound size={16} color="#854D0E" style={{ marginRight: 8 }} />
+            <Text style={styles.privateCodeText}>Private Code: {session.joinCode}</Text>
           </View>
         )}
       </View>
 
-      {/* Upfront Location Card */}
-      <View style={styles.locationCard}>
-        <View style={styles.locationHeader}>
-          {session.locationMode === LocationMode.ONLINE ? (
-            <Globe size={18} color="#38BDF8" style={{ marginRight: 6 }} />
-          ) : (
-            <MapPin size={18} color="#F59E0B" style={{ marginRight: 6 }} />
-          )}
-          <Text style={styles.locationTitle}>
+      {/* Online Location Details Card (Artboard Yellow Card, Pages 17 & 18) */}
+      <View style={styles.locationCardYellow}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+          <Globe size={18} color="#854D0E" style={{ marginRight: 8 }} />
+          <Text style={styles.locationHeaderYellow}>
             {session.locationMode.toUpperCase()} LOCATION DETAILS
           </Text>
         </View>
 
         {session.locationMode !== LocationMode.OFFLINE && session.meetingLink ? (
-          <View style={styles.linkRow}>
-            <Text style={styles.linkPrompt}>Meeting Link:</Text>
-            <Text style={styles.linkText} selectable>
+          <View>
+            <Text style={styles.meetingLinkPrompt}>Meeting Link:</Text>
+            <Text style={styles.meetingLinkClickable} selectable>
               {session.meetingLink}
             </Text>
           </View>
-        ) : null}
-
-        {session.locationMode !== LocationMode.ONLINE && session.locationAddress ? (
-          <View style={styles.linkRow}>
-            <Text style={styles.linkPrompt}>Campus Address:</Text>
-            <Text style={styles.locationAddressText}>
-              {session.locationAddress}
+        ) : (
+          <View>
+            <Text style={styles.meetingLinkPrompt}>Campus Location:</Text>
+            <Text style={[styles.meetingLinkPrompt, { color: '#111827', fontWeight: '700' }]}>
+              {session.locationAddress || 'ADTU Main Campus'}
             </Text>
           </View>
-        ) : null}
+        )}
       </View>
 
-      {/* Credit & Duration Summary */}
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryRow}>
-          <Clock size={16} color="#94A3B8" />
-          <Text style={styles.summaryLabel}>Duration:</Text>
-          <Text style={styles.summaryVal}>{session.durationHours} Hours</Text>
+      {/* Duration & Fee Summary Card (Artboard Mint Card, Pages 17 & 18) */}
+      <View style={styles.statsCardMint}>
+        <View style={styles.statLine}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Clock size={16} color="#0E6245" style={{ marginRight: 8 }} />
+            <Text style={styles.statLineLabel}>Duration:</Text>
+          </View>
+          <Text style={styles.statLineVal}>{session.durationHours} Hours</Text>
         </View>
 
-        <View style={styles.summaryRow}>
-          <Coins size={16} color="#FBBF24" />
-          <Text style={styles.summaryLabel}>Learner Fee:</Text>
-          <Text style={styles.summaryVal}>{session.durationHours} Credit(s)</Text>
+        <View style={styles.statLine}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Coins size={16} color="#0E6245" style={{ marginRight: 8 }} />
+            <Text style={styles.statLineLabel}>Learner Fee:</Text>
+          </View>
+          <Text style={styles.statLineVal}>{session.durationHours} Credit(s)</Text>
         </View>
 
-        <View style={styles.summaryRow}>
-          <Users size={16} color="#38BDF8" />
-          <Text style={styles.summaryLabel}>Minimum Gate:</Text>
-          <Text style={styles.summaryVal}>
-            Min {session.minParticipants} confirmed student(s)
+        <View style={styles.statLine}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Users size={16} color="#0E6245" style={{ marginRight: 8 }} />
+            <Text style={styles.statLineLabel}>Minimum Gate:</Text>
+          </View>
+          <Text style={styles.statLineVal}>
+            Min {session.minParticipants || 1} confirmed student(s)
           </Text>
         </View>
       </View>
 
       {/* =========================================================================
-          HOST ADMIN PANEL (Viewable by Hoster)
+          HOST MANAGEMENT PANEL (Artboard Pages 17 & 18)
       ========================================================================= */}
       {isHost && (
-        <View style={styles.adminPanel}>
-          <View style={styles.adminHeader}>
-            <ShieldCheck size={20} color="#38BDF8" style={{ marginRight: 8 }} />
-            <View>
-              <Text style={styles.adminTitle}>HOST MANAGEMENT PANEL</Text>
-              <Text style={styles.adminSub}>Roster controls, verification, and event management</Text>
+        <View style={styles.hostManagementCard}>
+          <View style={styles.managementHeaderRow}>
+            <ShieldCheck size={20} color="#0E6245" style={{ marginRight: 8 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.managementTitle}>HOST MANAGEMENT PANEL</Text>
+              <Text style={styles.managementSub}>Roster controls, verification, and event management</Text>
             </View>
           </View>
 
-          {/* Cancel Event (Only if not started) */}
-          {!sessionCancelled && !sessionCompleted && (
-            <View style={styles.adminActionRow}>
-              {!hasStarted ? (
-                <TouchableOpacity
-                  style={styles.cancelEventBtn}
-                  onPress={handleCancelSession}
-                  disabled={actionLoading}
-                >
-                  <AlertOctagon size={16} color="#EF4444" style={{ marginRight: 6 }} />
-                  <Text style={styles.cancelEventText}>Cancel Event (Not Started)</Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.cancellationLockedBox}>
-                  <Text style={styles.cancellationLockedText}>
-                    Event has commenced — cancellation is locked.
-                  </Text>
-                </View>
-              )}
+          {/* Cancel Event (Only if not started, Artboard Page 18) */}
+          {!sessionCancelled && !sessionCompleted && !hasStarted && (
+            <View style={{ marginTop: 12 }}>
+              <TouchableOpacity
+                style={styles.cancelEventBtn}
+                onPress={handleCancelSession}
+                disabled={actionLoading}
+              >
+                <AlertOctagon size={16} color="#DC2626" style={{ marginRight: 6 }} />
+                <Text style={styles.cancelEventBtnText}>Cancel event (not started)</Text>
+              </TouchableOpacity>
             </View>
           )}
 
-          {/* Participant Roster Table with Removal */}
-          <Text style={styles.rosterTitle}>
+          {/* Registered Participants Roster */}
+          <Text style={styles.rosterSectionTitle}>
             REGISTERED PARTICIPANTS ({session.participants?.length || 0} / {maxCap})
           </Text>
 
           {(!session.participants || session.participants.length === 0) ? (
-            <Text style={styles.emptyRosterText}>No students have joined this session yet.</Text>
+            <Text style={styles.noParticipantsText}>No students have joined this session yet.</Text>
           ) : (
             session.participants.map((p) => (
-              <View key={p.id} style={styles.participantRow}>
+              <View key={p.id} style={styles.participantMintCard}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.participantName}>{p.name}</Text>
                   {p.email && <Text style={styles.participantEmail}>{p.email}</Text>}
-                  <View style={styles.attendanceTagRow}>
-                    {p.attendanceConfirmed ? (
-                      <Text style={styles.attendanceConfirmedTag}>
-                        ✓ Attendance Confirmed ({p.confirmedBy || 'self'})
-                      </Text>
-                    ) : (
-                      <Text style={styles.attendancePendingTag}>• Attendance Pending</Text>
-                    )}
-                  </View>
+                  {p.attendanceConfirmed ? (
+                    <Text style={styles.attendanceConfirmedText}>
+                      ✓ Attendance Confirmed ({p.confirmedBy || 'host'})
+                    </Text>
+                  ) : (
+                    <Text style={{ color: '#D97706', fontSize: 11, marginTop: 4, fontWeight: '700' }}>
+                      • Attendance Pending
+                    </Text>
+                  )}
                 </View>
-
-                {/* Host Two-Sided Attendance Verification (Once session ends) */}
-                {hasEnded && !p.attendanceConfirmed && !sessionCompleted && (
-                  <TouchableOpacity
-                    style={styles.verifyPresentBtn}
-                    onPress={() => handleConfirmAttendance(p.userId)}
-                    disabled={actionLoading}
-                  >
-                    <Check size={14} color="#FFFFFF" style={{ marginRight: 2 }} />
-                    <Text style={styles.verifyPresentText}>Verify</Text>
-                  </TouchableOpacity>
-                )}
-
-                {/* Host Remove Participant Button (Only if not ended) */}
-                {!hasEnded && !sessionCompleted && (
-                  <TouchableOpacity
-                    style={styles.removeParticipantBtn}
-                    onPress={() => handleRemoveParticipant(p.userId, p.name)}
-                    disabled={actionLoading}
-                  >
-                    <UserX size={14} color="#EF4444" />
-                    <Text style={styles.removeParticipantText}>Remove</Text>
-                  </TouchableOpacity>
-                )}
               </View>
             ))
           )}
 
-          {/* Host Start Early */}
+          {/* Start Session Early (Artboard Page 18) */}
           {!hasStarted && !sessionCancelled && session.status === SessionStatus.SCHEDULED && (
-            <TouchableOpacity
-              style={styles.startEarlyBtn}
-              onPress={handleStartEarly}
-              disabled={actionLoading}
-            >
-              <Play size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.btnText}>Start Session Early 🚀</Text>
-            </TouchableOpacity>
+            <View style={{ marginTop: 12 }}>
+              <TouchableOpacity
+                style={styles.startEarlyPineBtn}
+                onPress={handleStartEarly}
+                disabled={actionLoading}
+              >
+                <Play size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.startEarlyBtnText}>Start session early</Text>
+              </TouchableOpacity>
+            </View>
           )}
 
-          {/* Host Public Announcement - Only for public group/multi-mentor sessions */}
-          {!session.announcedPublicly && !sessionCancelled && !session.isPrivate && session.sessionType !== SessionType.ONE_TO_ONE && (
-            <TouchableOpacity
-              style={styles.announceBtn}
-              onPress={handleAnnounce}
-              disabled={actionLoading}
-            >
-              <Megaphone size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.btnText}>Announce Session Publicly (Free/1 credit)</Text>
-            </TouchableOpacity>
-          )}
+          {/* Stop Session Early & Review Attendance (Artboard Page 18) */}
+          {(isHost || isCoMentor) &&
+            !sessionCompleted &&
+            !sessionCancelled &&
+            !sessionNoShow &&
+            !hasEnded &&
+            (session.status === SessionStatus.IN_PROGRESS || (session.status as any) === 'in_progress' || hasStarted || session.status === SessionStatus.SCHEDULED) && (
+              <View style={{ marginTop: 10 }}>
+                <TouchableOpacity
+                  style={styles.stopEarlyRedBtn}
+                  onPress={handleStopEarly}
+                  disabled={actionLoading}
+                >
+                  <Square size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.stopEarlyBtnText}>Stop session early & review attendance</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
-          {/* Host Complete & Settle Payout - ONLY after session has ended (Removed "Mark Completed Early") */}
-          {hasEnded && !sessionCompleted && !sessionCancelled && (
-            <TouchableOpacity
-              style={styles.completeBtn}
-              onPress={handleCompleteSession}
-              disabled={actionLoading}
-            >
-              <CheckCircle size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.btnText}>Mark Completed & Settle Payout</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Share Event Banner - ONLY after session gets over (completed or hasEnded) */}
-          {(sessionCompleted || hasEnded) && (
-            <TouchableOpacity
-              style={styles.shareBannerBtn}
-              onPress={() => setShareBannerModalOpen(true)}
-            >
-              <Share2 size={18} color="#38BDF8" style={{ marginRight: 6 }} />
-              <Text style={styles.shareBannerBtnText}>Share Event Banner (.png)</Text>
-            </TouchableOpacity>
-          )}
+          {/* Share Event Banner (.png) Button (Artboard Page 17) */}
+          <TouchableOpacity
+            style={styles.shareBannerOutlineBtn}
+            onPress={() => setShareBannerModalOpen(true)}
+          >
+            <Share2 size={16} color="#0E6245" style={{ marginRight: 8 }} />
+            <Text style={styles.shareBannerOutlineText}>Share event banner (.png)</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -1110,7 +1177,7 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
               <Switch
                 value={isAnonymous}
                 onValueChange={setIsAnonymous}
-                trackColor={{ false: '#334155', true: '#0284C7' }}
+                trackColor={{ false: '#D1D5DB', true: '#0E6245' }}
                 thumbColor="#FFFFFF"
               />
             </View>
@@ -1135,15 +1202,21 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
         </View>
       </Modal>
 
-      {/* Share Event Banner Modal with Toggleable Options */}
+      {/* Share Event Banner Modal (Artboard Page 19) */}
       <Modal visible={shareBannerModalOpen} transparent animationType="slide">
         <View style={styles.modalBg}>
           <View style={styles.shareModalCard}>
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={styles.shareModalHeader}>
-                <Sparkles size={20} color="#38BDF8" style={{ marginRight: 8 }} />
+                <Sparkles size={20} color="#0E6245" style={{ marginRight: 8 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.modalTitle}>Share Event Banner</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                    <Text style={styles.modalTitle}>Share event </Text>
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={styles.modalTitle}>banner</Text>
+                      <BrandUnderline width={54} style={{ marginTop: 2 }} />
+                    </View>
+                  </View>
                   <Text style={styles.modalSub}>
                     Customize what details to include on your showcase flyer
                   </Text>
@@ -1160,7 +1233,7 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
                   <Switch
                     value={showCredit}
                     onValueChange={setShowCredit}
-                    trackColor={{ false: '#334155', true: '#0284C7' }}
+                    trackColor={{ false: '#D1D5DB', true: '#0E6245' }}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -1175,7 +1248,7 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
                   <Switch
                     value={showLocation}
                     onValueChange={setShowLocation}
-                    trackColor={{ false: '#334155', true: '#0284C7' }}
+                    trackColor={{ false: '#D1D5DB', true: '#0E6245' }}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -1188,7 +1261,7 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
                   <Switch
                     value={showDateTime}
                     onValueChange={setShowDateTime}
-                    trackColor={{ false: '#334155', true: '#0284C7' }}
+                    trackColor={{ false: '#D1D5DB', true: '#0E6245' }}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -1203,7 +1276,7 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
                   <Switch
                     value={showHostTag}
                     onValueChange={setShowHostTag}
-                    trackColor={{ false: '#334155', true: '#0284C7' }}
+                    trackColor={{ false: '#D1D5DB', true: '#0E6245' }}
                     thumbColor="#FFFFFF"
                   />
                 </View>
@@ -1216,26 +1289,28 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
                   <Switch
                     value={showSkills}
                     onValueChange={setShowSkills}
-                    trackColor={{ false: '#334155', true: '#0284C7' }}
+                    trackColor={{ false: '#D1D5DB', true: '#0E6245' }}
                     thumbColor="#FFFFFF"
                   />
                 </View>
               </View>
 
-              {/* Live Banner Card Preview */}
+              {/* Live Banner Card Preview (Artboard Page 19) */}
               <Text style={styles.previewSectionTitle}>LIVE BANNER PREVIEW</Text>
               <View style={styles.bannerPreviewCard}>
                 <View style={styles.bannerPreviewHeader}>
                   <View style={styles.bannerPreviewBadge}>
                     <Text style={styles.bannerPreviewBadgeText}>CAMPUS SKILL EXCHANGE PASS</Text>
                   </View>
-                  <Text style={styles.bannerPreviewType}>
-                    {session.sessionType === SessionType.MULTI_MENTOR
-                      ? 'MULTI-HOST'
-                      : session.sessionType === SessionType.GROUP
-                      ? 'GROUP WORKSHOP'
-                      : '1-ON-1'}
-                  </Text>
+                  <View style={styles.bannerTypePill}>
+                    <Text style={styles.bannerPreviewType}>
+                      {session.sessionType === SessionType.MULTI_MENTOR
+                        ? 'MULTI-HOST'
+                        : session.sessionType === SessionType.GROUP
+                        ? 'GROUP'
+                        : '1-ON-1'}
+                    </Text>
+                  </View>
                 </View>
 
                 <Text style={styles.bannerPreviewTitle}>
@@ -1244,10 +1319,15 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
 
                 {showHostTag && (
                   <View style={styles.bannerHostRow}>
-                    <AvatarWithBadgeFrame name={session.hostName} size={32} />
-                    <View style={{ marginLeft: 8 }}>
+                    <View style={styles.bannerAvatarCircle}>
+                      <Text style={styles.bannerAvatarText}>CA</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
                       <Text style={styles.bannerHostRealName}>{session.hostName}</Text>
                       <Text style={styles.bannerHostUsername}>@{session.hostUsername || 'host'}</Text>
+                    </View>
+                    <View style={styles.primaryHostPill}>
+                      <Text style={styles.primaryHostText}>Host</Text>
                     </View>
                   </View>
                 )}
@@ -1255,7 +1335,7 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
                 {showSkills && (
                   <View style={styles.bannerSkillsRow}>
                     <View style={styles.bannerSkillTag}>
-                      <Text style={styles.bannerSkillTagText}>{session.skillName}</Text>
+                      <Text style={styles.bannerSkillTagText}>#{session.skillName}</Text>
                     </View>
                     {session.skillsTags?.map((st, i) => (
                       <View key={i} style={styles.bannerSubTag}>
@@ -1269,7 +1349,7 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
 
                 {showDateTime && (
                   <View style={styles.bannerMetaItem}>
-                    <Calendar size={13} color="#38BDF8" style={{ marginRight: 6 }} />
+                    <Calendar size={14} color="#0E6245" style={{ marginRight: 8 }} />
                     <Text style={styles.bannerMetaText}>
                       {scheduledDateObj.toLocaleDateString([], {
                         weekday: 'short',
@@ -1283,10 +1363,10 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
 
                 {showLocation && (
                   <View style={styles.bannerMetaItem}>
-                    <MapPin size={13} color="#F59E0B" style={{ marginRight: 6 }} />
+                    <MapPin size={14} color="#854D0E" style={{ marginRight: 8 }} />
                     <Text style={styles.bannerMetaText}>
                       {session.locationMode === LocationMode.ONLINE
-                        ? `Online: ${session.meetingLink || 'Meeting URL'}`
+                        ? `Online: ${session.meetingLink || 'Meeting Link'}`
                         : (session.locationAddress || 'Campus Center')}
                     </Text>
                   </View>
@@ -1294,7 +1374,7 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
 
                 {showCredit && (
                   <View style={styles.bannerMetaItem}>
-                    <Coins size={13} color="#10B981" style={{ marginRight: 6 }} />
+                    <Coins size={14} color="#0E6245" style={{ marginRight: 8 }} />
                     <Text style={styles.bannerMetaTextCredit}>
                       Time-Credit Fee / Earn: {session.durationHours} Credit(s)
                     </Text>
@@ -1312,18 +1392,28 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.confirmShareBtn}
+                  style={[styles.confirmShareBtn, actionLoading && { opacity: 0.7 }]}
                   onPress={handleShareBanner}
+                  disabled={actionLoading}
                 >
-                  <Share2 size={15} color="#FFFFFF" style={{ marginRight: 5 }} />
+                  {actionLoading ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 5 }} />
+                  ) : (
+                    <Share2 size={15} color="#FFFFFF" style={{ marginRight: 5 }} />
+                  )}
                   <Text style={styles.confirmShareBtnText}>Share</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.downloadBannerPngBtn}
+                  style={[styles.downloadBannerPngBtn, actionLoading && { opacity: 0.7 }]}
                   onPress={handleDownloadBannerPng}
+                  disabled={actionLoading}
                 >
-                  <Download size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  {actionLoading ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
+                  ) : (
+                    <Download size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  )}
                   <Text style={styles.downloadBannerPngBtnText}>Download PNG</Text>
                 </TouchableOpacity>
               </View>
@@ -1331,372 +1421,528 @@ export const SessionDetailScreen = ({ route, navigation }: any) => {
           </View>
         </View>
       </Modal>
-    </ScrollView>
+
+      {/* Attendance Review Modal (Present / Absent) */}
+      <Modal visible={attendanceModalOpen} transparent animationType="slide">
+        <View style={styles.modalBg}>
+          <View style={[styles.modalCard, { maxHeight: '85%' }]}>
+            <View style={styles.attendanceModalHeader}>
+              <View style={styles.attendanceTitleRow}>
+                <ClipboardCheck size={22} color="#38BDF8" style={{ marginRight: 8 }} />
+                <Text style={styles.modalTitle}>Attendance Verification</Text>
+              </View>
+              <Text style={styles.modalSub}>
+                Mark each learner as Present or Absent. Present learners are debited {session.durationHours} cr and their attendance is confirmed for mentor payouts.
+              </Text>
+            </View>
+
+            <ScrollView style={{ maxHeight: 300, marginVertical: 8 }}>
+              {(!session.participants || session.participants.filter((p) => p.role === ParticipantRole.LEARNER).length === 0) ? (
+                <View style={{ padding: 16, alignItems: 'center' }}>
+                  <Text style={{ color: '#94A3B8', fontSize: 13 }}>No registered learners in this session.</Text>
+                </View>
+              ) : (
+                session.participants
+                  .filter((p) => p.role === ParticipantRole.LEARNER)
+                  .map((p) => {
+                    const isPresent = attendanceState[p.userId] ?? true;
+                    return (
+                      <View key={p.id || p.userId} style={styles.attendanceItemCard}>
+                        <View style={styles.attendanceUserInfo}>
+                          <Text style={styles.attendanceUserName}>{p.name}</Text>
+                          {p.username && <Text style={styles.attendanceUserHandle}>@{p.username}</Text>}
+                        </View>
+                        <View style={styles.attendanceToggleRow}>
+                          <TouchableOpacity
+                            style={[
+                              styles.togglePresentBtn,
+                              isPresent && styles.togglePresentActive,
+                            ]}
+                            onPress={() =>
+                              setAttendanceState((prev) => ({ ...prev, [p.userId]: true }))
+                            }
+                          >
+                            <Check size={14} color={isPresent ? '#FFFFFF' : '#10B981'} style={{ marginRight: 4 }} />
+                            <Text style={[styles.toggleBtnText, isPresent && styles.toggleActiveText]}>
+                              Present
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[
+                              styles.toggleAbsentBtn,
+                              !isPresent && styles.toggleAbsentActive,
+                            ]}
+                            onPress={() =>
+                              setAttendanceState((prev) => ({ ...prev, [p.userId]: false }))
+                            }
+                          >
+                            <UserX size={14} color={!isPresent ? '#FFFFFF' : '#EF4444'} style={{ marginRight: 4 }} />
+                            <Text style={[styles.toggleBtnText, !isPresent && styles.toggleActiveText]}>
+                              Absent
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    );
+                  })
+              )}
+            </ScrollView>
+
+            <View style={styles.attendanceSummaryBox}>
+              <Text style={styles.attendanceSummaryText}>
+                Summary: {Object.values(attendanceState).filter(Boolean).length} Present,{' '}
+                {Object.values(attendanceState).filter((v) => !v).length} Absent
+              </Text>
+              <Text style={styles.attendanceSummarySub}>
+                Present students will be charged. Absent students will not be charged.
+              </Text>
+            </View>
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setAttendanceModalOpen(false)}
+                disabled={actionLoading}
+              >
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveReviewBtn, { backgroundColor: '#059669' }]}
+                onPress={handleFinalizeAttendance}
+                disabled={actionLoading}
+              >
+                {actionLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <CheckCircle size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.saveReviewText}>Confirm & Conclude 🏁</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#F8FAF9',
   },
   content: {
-    padding: 16,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 60,
+  },
+  topHeaderBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 16,
+  },
+  backBtn: {
+    padding: 4,
+  },
+  headerTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#111827',
   },
   cancelledBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#EF4444',
-    padding: 12,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 16,
+    padding: 14,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
   },
   cancelledText: {
-    color: '#FCA5A5',
+    color: '#991B1B',
     fontSize: 13,
     fontWeight: '700',
     flex: 1,
   },
   headerCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  topBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  formatTag: {
-    color: '#38BDF8',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-  },
-  privateBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(251, 191, 36, 0.15)',
-    borderRadius: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-  },
-  privateBadgeText: {
-    color: '#FBBF24',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  publicBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-    borderRadius: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-  },
-  publicBadgeText: {
-    color: '#38BDF8',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  skillTitle: {
-    color: '#F8FAFC',
-    fontSize: 20,
-    fontWeight: '800',
-    marginBottom: 6,
-  },
-  hostText: {
-    color: '#94A3B8',
-    fontSize: 13,
-  },
-  infoCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
     padding: 16,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8E5',
+  },
+  infoCard: {
+    backgroundColor: '#F2EEFD',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 14,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  infoLabel: {
-    color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  infoVal: {
-    color: '#F8FAFC',
-    fontSize: 14,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  timeStatusBadge: {
-    borderRadius: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-  },
-  statusUpcoming: {
-    backgroundColor: '#0369A1',
-  },
-  statusLive: {
-    backgroundColor: '#059669',
-  },
-  statusEnded: {
-    backgroundColor: '#475569',
-  },
-  timeStatusText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  spotsBadge: {
-    borderRadius: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-  },
-  spotsOpen: {
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-    borderWidth: 1,
-    borderColor: '#38BDF8',
-  },
-  spotsFull: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderWidth: 1,
-    borderColor: '#EF4444',
-  },
-  spotsText: {
-    color: '#F8FAFC',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  joinCodeBox: {
+  topBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(251, 191, 36, 0.1)',
-    borderRadius: 10,
-    padding: 10,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(251, 191, 36, 0.3)',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginBottom: 12,
   },
-  joinCodePrompt: {
-    color: '#94A3B8',
-    fontSize: 12,
+  formatTag: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+  },
+  formatTagText: {
+    color: '#111827',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  privateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF7DA',
+    borderRadius: 12,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#FEF08A',
+  },
+  privateBadgeText: {
+    color: '#854D0E',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  publicBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  publicBadgeText: {
+    color: '#111827',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  eventCustomTitle: {
+    color: '#111827',
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 4,
+    letterSpacing: -0.5,
+  },
+  eventDescSubtitle: {
+    color: '#5A6561',
+    fontSize: 13,
+    marginBottom: 14,
+  },
+  learnerBannerMint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EBF7F0',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 14,
+  },
+  learnerBannerText: {
+    color: '#0E6245',
+    fontSize: 13,
     fontWeight: '600',
   },
-  joinCodeText: {
-    color: '#FBBF24',
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  locationCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
-    padding: 16,
+  // Host Card (Page 17/18)
+  hostCardWhite: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 14,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8E5',
   },
-  locationHeader: {
-    flexDirection: 'row',
+  hostAvatarCA: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#0E6245',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+    marginRight: 12,
   },
-  locationTitle: {
-    color: '#94A3B8',
-    fontSize: 12,
+  hostAvatarText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  hostCardName: {
+    color: '#111827',
+    fontSize: 15,
     fontWeight: '700',
-    letterSpacing: 0.5,
   },
-  linkRow: {
-    marginTop: 6,
+  hostCardUsername: {
+    color: '#0E6245',
+    fontSize: 12,
+    fontWeight: '600',
   },
-  linkPrompt: {
-    color: '#64748B',
+  primaryHostPill: {
+    backgroundColor: '#EBF7F0',
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  primaryHostText: {
+    color: '#0E6245',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  // Purple / Lavender Card (Page 17/18)
+  dateTimeCardLavender: {
+    backgroundColor: '#F2EEFD',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 14,
+  },
+  cardSectionLabelMuted: {
+    color: '#5A6561',
     fontSize: 11,
     fontWeight: '600',
     marginBottom: 2,
   },
-  linkText: {
-    color: '#38BDF8',
-    fontSize: 13,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
-  },
-  locationAddressText: {
-    color: '#F8FAFC',
-    fontSize: 13,
-  },
-  summaryCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#334155',
-    gap: 8,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  summaryLabel: {
-    color: '#94A3B8',
-    fontSize: 13,
-    flex: 1,
-  },
-  summaryVal: {
-    color: '#F8FAFC',
-    fontSize: 13,
+  cardBoldText: {
+    color: '#111827',
+    fontSize: 14,
     fontWeight: '700',
   },
-  adminPanel: {
-    backgroundColor: '#111827',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1.5,
-    borderColor: '#38BDF8',
-    marginBottom: 16,
-    gap: 12,
+  statusPillCapsule: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
   },
-  adminHeader: {
+  statusPillText: {
+    color: '#111827',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  statusPillCapsuleDark: {
+    backgroundColor: '#18201D',
+  },
+  statusPillTextDark: {
+    color: '#FFFFFF',
+  },
+  privateCodeBoxYellow: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#FEF7DA',
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 12,
   },
-  adminTitle: {
-    color: '#38BDF8',
+  privateCodeText: {
+    color: '#854D0E',
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.8,
   },
-  adminSub: {
-    color: '#94A3B8',
-    fontSize: 11,
-    marginTop: 1,
+  // Yellow Location Card (Page 17/18)
+  locationCardYellow: {
+    backgroundColor: '#FEF7DA',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 14,
   },
-  adminActionRow: {
-    marginTop: 4,
+  locationHeaderYellow: {
+    color: '#854D0E',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  meetingLinkPrompt: {
+    color: '#5A6561',
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  meetingLinkClickable: {
+    color: '#0E6245',
+    fontSize: 13,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  // Mint Stats Card (Page 17/18)
+  statsCardMint: {
+    backgroundColor: '#EBF7F0',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 14,
+    gap: 8,
+  },
+  statLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  statLineLabel: {
+    color: '#374151',
+    fontSize: 13,
+    flex: 1,
+  },
+  statLineVal: {
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  // Host Management Panel (Page 17/18)
+  hostManagementCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: 1.5,
+    borderColor: '#0E6245',
+    marginBottom: 16,
+  },
+  managementHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  managementTitle: {
+    color: '#0E6245',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  managementSub: {
+    color: '#5A6561',
+    fontSize: 11,
   },
   cancelEventBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#DC2626',
+    borderRadius: 22,
+    height: 44,
     justifyContent: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#EF4444',
-    paddingVertical: 10,
+    alignItems: 'center',
   },
-  cancelEventText: {
-    color: '#EF4444',
+  cancelEventBtnText: {
+    color: '#DC2626',
     fontSize: 13,
     fontWeight: '700',
   },
-  cancellationLockedBox: {
-    backgroundColor: '#1E293B',
-    borderRadius: 8,
-    padding: 8,
+  startEarlyPineBtn: {
+    backgroundColor: '#0E6245',
+    borderRadius: 22,
+    height: 44,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  cancellationLockedText: {
-    color: '#64748B',
-    fontSize: 11,
-  },
-  rosterTitle: {
-    color: '#94A3B8',
-    fontSize: 11,
+  startEarlyBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 0.5,
-    marginTop: 8,
   },
-  emptyRosterText: {
-    color: '#64748B',
-    fontSize: 12,
-    fontStyle: 'italic',
-    paddingVertical: 8,
-  },
-  participantRow: {
-    flexDirection: 'row',
+  stopEarlyRedBtn: {
+    backgroundColor: '#991B1B',
+    borderRadius: 22,
+    height: 44,
+    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 6,
-    gap: 10,
+  },
+  stopEarlyBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  rosterSectionTitle: {
+    color: '#5A6561',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    marginTop: 16,
+    marginBottom: 10,
+  },
+  noParticipantsText: {
+    color: '#5A6561',
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  participantMintCard: {
+    backgroundColor: '#EBF7F0',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 8,
   },
   participantName: {
-    color: '#F8FAFC',
-    fontSize: 13,
+    color: '#111827',
+    fontSize: 14,
     fontWeight: '700',
   },
   participantEmail: {
-    color: '#94A3B8',
-    fontSize: 11,
+    color: '#5A6561',
+    fontSize: 12,
   },
-  attendanceTagRow: {
-    marginTop: 3,
+  attendanceConfirmedText: {
+    color: '#0E6245',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
   },
-  attendanceConfirmedTag: {
-    color: '#10B981',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  attendancePendingTag: {
-    color: '#F59E0B',
-    fontSize: 11,
-  },
-  verifyPresentBtn: {
-    backgroundColor: '#059669',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+  shareBannerOutlineBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    height: 44,
+    borderWidth: 1.5,
+    borderColor: '#0E6245',
+    marginTop: 14,
   },
-  verifyPresentText: {
-    color: '#FFFFFF',
-    fontSize: 11,
+  shareBannerOutlineText: {
+    color: '#0E6245',
+    fontSize: 13,
     fontWeight: '700',
   },
-  removeParticipantBtn: {
+  coMentorsWrap: {
+    gap: 8,
+    marginBottom: 14,
+  },
+  coMentorCardWhite: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-  },
-  removeParticipantText: {
-    color: '#EF4444',
-    fontSize: 11,
-    fontWeight: '600',
+    borderColor: '#E2E8E5',
   },
   studentControlsCard: {
     gap: 10,
     marginBottom: 16,
   },
   joinActionBtn: {
-    backgroundColor: '#0284C7',
+    backgroundColor: '#0E6245',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
+    height: 48,
+    borderRadius: 24,
   },
   joinActionText: {
     color: '#FFFFFF',
@@ -1704,116 +1950,126 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   fullBanner: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 16,
+    padding: 14,
     borderWidth: 1,
-    borderColor: '#EF4444',
+    borderColor: '#FCA5A5',
   },
   fullBannerText: {
-    color: '#FCA5A5',
+    color: '#DC2626',
     fontSize: 13,
     textAlign: 'center',
+    fontWeight: '700',
   },
   registeredNoticeBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: '#EBF7F0',
+    borderRadius: 16,
+    padding: 14,
     borderWidth: 1,
-    borderColor: '#10B981',
+    borderColor: '#D4EAD9',
   },
   registeredNoticeTitle: {
-    color: '#10B981',
+    color: '#0E6245',
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   registeredNoticeSub: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 11,
     marginTop: 2,
   },
   inProgressNoticeBox: {
-    backgroundColor: 'rgba(56, 189, 248, 0.1)',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: '#EBF7F0',
+    borderRadius: 16,
+    padding: 14,
     borderWidth: 1,
-    borderColor: '#38BDF8',
+    borderColor: '#D4EAD9',
   },
   inProgressNoticeText: {
-    color: '#38BDF8',
-    fontSize: 12,
+    color: '#0E6245',
+    fontSize: 13,
     textAlign: 'center',
+    fontWeight: '700',
   },
   confirmAttendanceBtn: {
-    backgroundColor: '#0284C7',
+    backgroundColor: '#0E6245',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
+    height: 48,
+    borderRadius: 24,
   },
   confirmedAttendanceBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: '#EBF7F0',
+    borderRadius: 16,
+    padding: 14,
     borderWidth: 1,
-    borderColor: '#10B981',
+    borderColor: '#D4EAD9',
   },
   confirmedAttendanceText: {
-    color: '#10B981',
+    color: '#0E6245',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   startEarlyBtn: {
-    backgroundColor: '#0284C7',
+    backgroundColor: '#0E6245',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
+    height: 48,
+    borderRadius: 24,
+  },
+  stopEarlyBtn: {
+    backgroundColor: '#991B1B',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 48,
+    borderRadius: 24,
   },
   announceBtn: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#18201D',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
+    height: 48,
+    borderRadius: 24,
   },
   completeBtn: {
-    backgroundColor: '#059669',
+    backgroundColor: '#0E6245',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
+    height: 48,
+    borderRadius: 24,
   },
   rateBtn: {
-    backgroundColor: '#1E293B',
-    borderWidth: 1,
-    borderColor: '#FBBF24',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#F59E0B',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
+    height: 48,
+    borderRadius: 24,
   },
   ratedDoneBox: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: '#FEF7DA',
+    borderRadius: 16,
+    padding: 14,
   },
   ratedDoneText: {
-    color: '#FBBF24',
+    color: '#854D0E',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   btnText: {
     color: '#FFFFFF',
@@ -1821,13 +2077,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   rateBtnText: {
-    color: '#FBBF24',
+    color: '#854D0E',
     fontSize: 14,
     fontWeight: '700',
   },
   modalBg: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -1835,20 +2091,25 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: '#0F172A',
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: '#334155',
-    padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+    padding: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 8,
   },
   modalTitle: {
-    color: '#F8FAFC',
+    color: '#111827',
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
     marginBottom: 4,
   },
   modalSub: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 12,
     marginBottom: 16,
     lineHeight: 16,
@@ -1860,10 +2121,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   feedbackInput: {
-    backgroundColor: '#1E293B',
-    borderRadius: 10,
+    backgroundColor: '#F8FAF9',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E2E8E5',
     padding: 12,
-    color: '#F8FAFC',
+    color: '#111827',
     fontSize: 14,
     textAlignVertical: 'top',
     marginBottom: 14,
@@ -1871,33 +2134,33 @@ const styles = StyleSheet.create({
   anonymousToggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
-    borderRadius: 10,
+    backgroundColor: '#EBF7F0',
+    borderRadius: 14,
     padding: 12,
     marginBottom: 16,
   },
   anonymousToggleLabel: {
-    color: '#F8FAFC',
+    color: '#111827',
     fontSize: 13,
     fontWeight: '700',
   },
   anonymousToggleSub: {
-    color: '#64748B',
+    color: '#5A6561',
     fontSize: 11,
     marginTop: 2,
   },
   joinCodeInput: {
-    backgroundColor: '#1E293B',
-    borderRadius: 10,
+    backgroundColor: '#FEF7DA',
+    borderRadius: 12,
     padding: 14,
-    color: '#FBBF24',
+    color: '#854D0E',
     fontSize: 18,
     fontWeight: '800',
     letterSpacing: 2,
     textAlign: 'center',
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#38BDF8',
+    borderWidth: 1.5,
+    borderColor: '#FEF08A',
   },
   modalBtnRow: {
     flexDirection: 'row',
@@ -1907,17 +2170,17 @@ const styles = StyleSheet.create({
   cancelBtn: {
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: 14,
   },
   cancelBtnText: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontWeight: '600',
   },
   saveReviewBtn: {
-    backgroundColor: '#0284C7',
+    backgroundColor: '#0E6245',
     paddingVertical: 10,
     paddingHorizontal: 18,
-    borderRadius: 8,
+    borderRadius: 20,
   },
   saveReviewText: {
     color: '#FFFFFF',
@@ -1928,24 +2191,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(56, 189, 248, 0.12)',
-    borderWidth: 1,
-    borderColor: '#38BDF8',
-    borderRadius: 12,
-    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#0E6245',
+    borderRadius: 22,
+    height: 44,
   },
   shareBannerBtnText: {
-    color: '#38BDF8',
-    fontSize: 14,
+    color: '#0E6245',
+    fontSize: 13,
     fontWeight: '700',
   },
   // Co-Host Invitation Request Banner
   coHostInviteBanner: {
-    backgroundColor: '#1E1B4B',
-    borderRadius: 14,
+    backgroundColor: '#FEF7DA',
+    borderRadius: 20,
     borderWidth: 1.5,
-    borderColor: '#818CF8',
-    padding: 14,
+    borderColor: '#FEF08A',
+    padding: 16,
     marginBottom: 14,
   },
   coHostInviteHeader: {
@@ -1954,15 +2217,16 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   coHostInviteTitle: {
-    color: '#F59E0B',
+    color: '#854D0E',
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.6,
   },
   coHostInviteDesc: {
-    color: '#E0E7FF',
+    color: '#854D0E',
     fontSize: 13,
     marginBottom: 12,
+    lineHeight: 18,
   },
   coHostActionRow: {
     flexDirection: 'row',
@@ -1970,12 +2234,12 @@ const styles = StyleSheet.create({
   },
   acceptCoHostBtn: {
     flex: 1,
-    backgroundColor: '#4F46E5',
+    backgroundColor: '#0E6245',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
+    height: 42,
+    borderRadius: 21,
   },
   acceptCoHostText: {
     color: '#FFFFFF',
@@ -1983,235 +2247,103 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   declineCoHostBtn: {
-    paddingVertical: 10,
+    height: 42,
     paddingHorizontal: 16,
-    borderRadius: 10,
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderWidth: 1,
-    borderColor: '#EF4444',
+    borderRadius: 21,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#DC2626',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   declineCoHostText: {
-    color: '#EF4444',
+    color: '#DC2626',
     fontSize: 13,
-    fontWeight: '600',
-  },
-  // Header details: custom title, tags, description
-  eventCustomTitle: {
-    color: '#F8FAFC',
-    fontSize: 22,
-    fontWeight: '800',
-    lineHeight: 28,
-    marginBottom: 8,
-  },
-  primarySkillChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-    borderRadius: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    marginBottom: 10,
-  },
-  primarySkillText: {
-    color: '#38BDF8',
-    fontSize: 12,
     fontWeight: '700',
   },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 12,
-  },
-  tagChip: {
-    backgroundColor: '#0F172A',
-    borderRadius: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  tagChipText: {
-    color: '#94A3B8',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  eventDescriptionText: {
-    color: '#CBD5E1',
-    fontSize: 13,
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  targetLearnerBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-  },
-  targetLearnerText: {
-    color: '#6EE7B7',
-    fontSize: 12,
-  },
-  // Host Identifier
-  hostIdentifierCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0F172A',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  hostRealName: {
-    color: '#F8FAFC',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  hostUsernameText: {
-    color: '#38BDF8',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  hostRoleBadge: {
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-    borderRadius: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-  },
-  hostRoleBadgeText: {
-    color: '#38BDF8',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  // Co-Mentors
-  coMentorsSection: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#334155',
-    gap: 8,
-  },
-  coMentorsSectionTitle: {
-    color: '#94A3B8',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  coMentorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0F172A',
-    borderRadius: 10,
-    padding: 8,
-  },
-  coMentorRealName: {
-    color: '#F8FAFC',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  coMentorUsername: {
-    color: '#64748B',
-    fontSize: 11,
-  },
-  coMentorStatusPill: {
-    borderRadius: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-  },
-  statusPillAccepted: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-  },
-  statusPillPending: {
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-  },
-  coMentorStatusPillText: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  statusPillAcceptedText: {
-    color: '#10B981',
-  },
-  statusPillPendingText: {
-    color: '#F59E0B',
-  },
-  // Share Banner Modal
+
+  // Share Banner Modal (Artboard Page 19)
   shareModalCard: {
     width: '100%',
     maxWidth: 440,
     maxHeight: '90%',
-    backgroundColor: '#0F172A',
-    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
     borderWidth: 1.5,
-    borderColor: '#38BDF8',
-    padding: 18,
+    borderColor: '#0E6245',
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
   },
   shareModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   togglesSection: {
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    padding: 10,
+    backgroundColor: '#F8FAF9',
+    borderRadius: 16,
+    padding: 12,
     marginBottom: 16,
-    gap: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+    gap: 8,
   },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 4,
+    paddingVertical: 6,
   },
   toggleInfo: {
     flex: 1,
-    paddingRight: 10,
+    paddingRight: 12,
   },
   toggleLabel: {
-    color: '#F8FAFC',
+    color: '#111827',
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   toggleSub: {
-    color: '#64748B',
+    color: '#5A6561',
     fontSize: 11,
     marginTop: 2,
   },
   previewSectionTitle: {
-    color: '#38BDF8',
+    color: '#5A6561',
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   bannerPreviewCard: {
-    backgroundColor: '#0B132B',
-    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
     borderWidth: 1.5,
-    borderColor: '#38BDF8',
-    padding: 16,
+    borderColor: '#0E6245',
+    padding: 18,
     marginBottom: 16,
+    shadowColor: '#0E6245',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 4,
   },
   bannerPreviewHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   bannerPreviewBadge: {
-    backgroundColor: '#0284C7',
-    borderRadius: 6,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
+    backgroundColor: '#0E6245',
+    borderRadius: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
   },
   bannerPreviewBadgeText: {
     color: '#FFFFFF',
@@ -2219,30 +2351,57 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.5,
   },
+  bannerTypePill: {
+    backgroundColor: '#18201D',
+    borderRadius: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
   bannerPreviewType: {
-    color: '#94A3B8',
+    color: '#FFFFFF',
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   bannerPreviewTitle: {
-    color: '#F8FAFC',
-    fontSize: 18,
+    color: '#111827',
+    fontSize: 20,
     fontWeight: '800',
-    marginBottom: 10,
+    marginBottom: 12,
+    letterSpacing: -0.4,
   },
   bannerHostRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
+    backgroundColor: '#F8FAF9',
+    borderRadius: 14,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+  },
+  bannerAvatarCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#0E6245',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  bannerAvatarText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
   },
   bannerHostRealName: {
-    color: '#F8FAFC',
+    color: '#111827',
     fontSize: 13,
     fontWeight: '700',
   },
   bannerHostUsername: {
-    color: '#38BDF8',
+    color: '#0E6245',
     fontSize: 11,
+    fontWeight: '600',
   },
   bannerSkillsRow: {
     flexDirection: 'row',
@@ -2251,29 +2410,32 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   bannerSkillTag: {
-    backgroundColor: 'rgba(56, 189, 248, 0.2)',
-    borderRadius: 6,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
+    backgroundColor: '#EBF7F0',
+    borderRadius: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
   },
   bannerSkillTagText: {
-    color: '#38BDF8',
+    color: '#0E6245',
     fontSize: 11,
     fontWeight: '700',
   },
   bannerSubTag: {
-    backgroundColor: '#1E293B',
-    borderRadius: 6,
-    paddingVertical: 2,
-    paddingHorizontal: 6,
+    backgroundColor: '#F8FAF9',
+    borderRadius: 10,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
   },
   bannerSubTagText: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 11,
+    fontWeight: '600',
   },
   bannerMetaDivider: {
     height: 1,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#E2E8E5',
     marginVertical: 10,
   },
   bannerMetaItem: {
@@ -2282,11 +2444,12 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   bannerMetaText: {
-    color: '#CBD5E1',
+    color: '#374151',
     fontSize: 12,
+    fontWeight: '600',
   },
   bannerMetaTextCredit: {
-    color: '#34D399',
+    color: '#0E6245',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -2300,8 +2463,8 @@ const styles = StyleSheet.create({
   confirmShareBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0284C7',
-    borderRadius: 10,
+    backgroundColor: '#18201D',
+    borderRadius: 20,
     paddingVertical: 10,
     paddingHorizontal: 16,
   },
@@ -2313,14 +2476,207 @@ const styles = StyleSheet.create({
   downloadBannerPngBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0284C7',
-    borderRadius: 10,
+    backgroundColor: '#0E6245',
+    borderRadius: 20,
     paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
   },
   downloadBannerPngBtnText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
+  },
+  // Action Required Cards (Artboard Yellow Theme)
+  actionRequiredCard: {
+    backgroundColor: '#FEF7DA',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#FEF08A',
+    padding: 16,
+    marginBottom: 16,
+  },
+  actionRequiredHeader: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  actionRequiredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF08A',
+    borderWidth: 1,
+    borderColor: '#FDE047',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    marginBottom: 6,
+  },
+  actionRequiredBadgeText: {
+    color: '#854D0E',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  actionRequiredTitle: {
+    color: '#854D0E',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  actionRequiredDesc: {
+    color: '#854D0E',
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  actionRequiredBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  actionPrimaryBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0E6245',
+    borderRadius: 22,
+    height: 44,
+  },
+  actionSecondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#DC2626',
+    borderRadius: 22,
+    height: 44,
+    paddingHorizontal: 16,
+  },
+  actionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  actionSecondaryText: {
+    color: '#DC2626',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  // Session State Card (when no action needed)
+  sessionStateCard: {
+    backgroundColor: '#EBF7F0',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#D4EAD9',
+    padding: 14,
+    marginBottom: 16,
+  },
+  sessionStateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sessionStateTitle: {
+    color: '#0E6245',
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  sessionStateSubtext: {
+    color: '#5A6561',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  // Attendance Review Modal (Artboard Light Theme)
+  attendanceModalHeader: {
+    marginBottom: 12,
+  },
+  attendanceTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  attendanceItemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAF9',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
+  },
+  attendanceUserInfo: {
+    flex: 1,
+    marginRight: 10,
+  },
+  attendanceUserName: {
+    color: '#111827',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  attendanceUserHandle: {
+    color: '#5A6561',
+    fontSize: 12,
+    marginTop: 1,
+  },
+  attendanceToggleRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  togglePresentBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8E5',
+  },
+  togglePresentActive: {
+    backgroundColor: '#0E6245',
+    borderColor: '#0E6245',
+  },
+  toggleAbsentBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8E5',
+  },
+  toggleAbsentActive: {
+    backgroundColor: '#DC2626',
+    borderColor: '#DC2626',
+  },
+  toggleBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5A6561',
+  },
+  toggleActiveText: {
+    color: '#FFFFFF',
+  },
+  attendanceSummaryBox: {
+    backgroundColor: '#EBF7F0',
+    borderRadius: 14,
+    padding: 12,
+    marginVertical: 10,
+    borderWidth: 1,
+    borderColor: '#D4EAD9',
+  },
+  attendanceSummaryText: {
+    color: '#0E6245',
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  attendanceSummarySub: {
+    color: '#5A6561',
+    fontSize: 11,
   },
 });

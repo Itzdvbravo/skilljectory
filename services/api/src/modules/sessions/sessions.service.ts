@@ -118,8 +118,41 @@ export class SessionsService {
     if (!data.scheduledAt || isNaN(data.scheduledAt.getTime())) {
       throw new BadRequestError('Session scheduled date and time is required');
     }
-    if (data.scheduledAt.getTime() <= Date.now()) {
-      throw new BadRequestError('Session scheduled time must be in the future');
+    const nowTime = Date.now();
+    if (data.scheduledAt.getTime() <= nowTime) {
+      throw new BadRequestError('Session cannot be scheduled in the past. Please choose a future date and time.');
+    }
+
+    // 2b. Prevent scheduling collisions with any active/scheduled session for the host
+    const newSessionStart = data.scheduledAt.getTime();
+    const newSessionEnd = newSessionStart + data.durationHours * 60 * 60 * 1000;
+
+    const existingHostSessions = await prisma.session.findMany({
+      where: {
+        status: { in: [SessionStatus.scheduled, SessionStatus.in_progress] },
+        OR: [
+          { host_id: hostId },
+          { mentors: { some: { mentor_id: hostId, status: { in: ['accepted', 'pending'] } } } },
+        ],
+      },
+      select: {
+        id: true,
+        title: true,
+        scheduled_at: true,
+        duration_hours: true,
+        status: true,
+      },
+    });
+
+    for (const s of existingHostSessions) {
+      const sStart = s.scheduled_at.getTime();
+      const sEnd = sStart + s.duration_hours * 60 * 60 * 1000;
+      // Overlap condition: newSessionStart < sEnd && newSessionEnd > sStart
+      if (newSessionStart < sEnd && newSessionEnd > sStart) {
+        throw new BadRequestError(
+          `Schedule conflict: You already have a session ("${s.title || 'Existing Session'}") ${s.status === SessionStatus.in_progress ? 'in progress' : 'scheduled'} from ${new Date(sStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} to ${new Date(sEnd).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`
+        );
+      }
     }
 
     // Validate title and description length
@@ -664,11 +697,251 @@ export class SessionsService {
       message: 'Session has started early! Status changed to in-progress.',
     };
   }
+  /**
+   * Conclude session with explicit attendance review (Present vs Absent)
+   * Deducts learner fee for present attendees, marks confirmed attendance,
+   * skips absent learners without debit, and completes/settles payouts.
+   */
+  static async concludeSessionWithAttendance(
+    hostId: string,
+    sessionId: string,
+    attendanceList?: { userId: string; attended: boolean }[]
+  ) {
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: {
+        host: { select: { id: true, name: true, username: true } },
+        participants: { include: { user: { select: { id: true, name: true, username: true } } } },
+        mentors: { select: { mentor_id: true } },
+      },
+    });
+
+    if (!session) throw new NotFoundError('Session not found');
+
+    const isHost = session.host_id === hostId;
+    const isCoMentor = session.mentors.some((m) => m.mentor_id === hostId);
+    if (!isHost && !isCoMentor) {
+      throw new ForbiddenError('Only the host or a mentor can conclude this session.');
+    }
+
+    if (session.status === SessionStatus.completed) {
+      throw new BadRequestError('Session is already completed.');
+    }
+    if (session.status === SessionStatus.cancelled) {
+      throw new BadRequestError('Session has already been cancelled.');
+    }
+
+    const learners = session.participants.filter((p) => p.role === ParticipantRole.learner);
+
+    // Build attendance mapping
+    const attendanceMap = new Map<string, boolean>();
+    if (attendanceList && Array.isArray(attendanceList) && attendanceList.length > 0) {
+      attendanceList.forEach((a) => attendanceMap.set(a.userId, Boolean(a.attended)));
+    } else {
+      // Default to their current attendance_confirmed, or true if not yet marked
+      learners.forEach((p) => {
+        attendanceMap.set(p.user_id, p.attendance_confirmed !== undefined ? p.attendance_confirmed : true);
+      });
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      // Process each learner
+      for (const learner of learners) {
+        const isPresent = attendanceMap.get(learner.user_id) ?? false;
+
+        if (isPresent) {
+          if (!learner.attendance_confirmed) {
+            // Apply attendance debit to learner (1 credit * duration_hours)
+            const debitAmount = -(1.0 * session.duration_hours);
+            await CreditsService.applyTransaction(tx, {
+              userId: learner.user_id,
+              amount: debitAmount,
+              type: LedgerTransactionType.session_earning,
+              referenceType: 'session_attendance',
+              referenceId: sessionId,
+            });
+
+            await tx.sessionParticipant.update({
+              where: { id: learner.id },
+              data: { attendance_confirmed: true, confirmed_by: ConfirmedBy.host },
+            });
+          }
+        } else {
+          // Absent student: ensure not confirmed
+          if (learner.attendance_confirmed) {
+            // Refund previously charged attendance debit
+            const refundAmount = 1.0 * session.duration_hours;
+            await CreditsService.applyTransaction(tx, {
+              userId: learner.user_id,
+              amount: refundAmount,
+              type: LedgerTransactionType.session_earning,
+              referenceType: 'session_attendance_refund',
+              referenceId: sessionId,
+            });
+          }
+          await tx.sessionParticipant.update({
+            where: { id: learner.id },
+            data: { attendance_confirmed: false, confirmed_by: null },
+          });
+        }
+      }
+
+      // Count confirmed attendees
+      const confirmedCount = Array.from(attendanceMap.values()).filter(Boolean).length;
+
+      // 1. Group Session Payout
+      if (session.session_type === SessionType.group) {
+        if (confirmedCount < 2) {
+          await tx.session.update({
+            where: { id: sessionId },
+            data: { status: SessionStatus.no_show },
+          });
+
+          return {
+            status: SessionStatus.no_show,
+            message: 'Session concluded as no-show: verified attendance fell below required minimum of 2.',
+          };
+        }
+
+        const calc = CreditEngine.calculateGroupSessionEarnings(confirmedCount, session.duration_hours);
+        if (session.host_id) {
+          await CreditsService.applyTransaction(tx, {
+            userId: session.host_id,
+            amount: calc.hostEarning,
+            type: LedgerTransactionType.session_earning,
+            referenceType: 'session',
+            referenceId: session.id,
+          });
+
+          await SessionsService.checkAndGrantMilestones(tx, session.host_id, session.duration_hours);
+        }
+
+        await tx.session.update({
+          where: { id: sessionId },
+          data: { status: SessionStatus.completed },
+        });
+
+        return {
+          status: SessionStatus.completed,
+          payout: calc.hostEarning,
+          confirmedCount,
+          message: `Session concluded! Host credited ${calc.hostEarning} credits for ${confirmedCount} attendee(s).`,
+        };
+      }
+
+      // 2. Multi-Mentor Payout
+      if (session.session_type === SessionType.multi_mentor) {
+        const mentorsCount = session.mentors.length;
+        if (confirmedCount < mentorsCount) {
+          await tx.session.update({
+            where: { id: sessionId },
+            data: { status: SessionStatus.no_show },
+          });
+
+          return {
+            status: SessionStatus.no_show,
+            message: 'Multi-mentor session marked no-show: verified attendance fell below mentor count.',
+          };
+        }
+
+        const calc = CreditEngine.calculateMultiMentorEarnings(confirmedCount, mentorsCount, session.duration_hours);
+        for (const mentor of session.mentors) {
+          await CreditsService.applyTransaction(tx, {
+            userId: mentor.mentor_id,
+            amount: calc.earningPerMentor,
+            type: LedgerTransactionType.session_earning,
+            referenceType: 'session',
+            referenceId: session.id,
+          });
+
+          await tx.sessionMentor.update({
+            where: {
+              session_id_mentor_id: { session_id: sessionId, mentor_id: mentor.mentor_id },
+            },
+            data: { credit_earned: calc.earningPerMentor },
+          });
+
+          await SessionsService.checkAndGrantMilestones(tx, mentor.mentor_id, session.duration_hours);
+        }
+
+        await tx.session.update({
+          where: { id: sessionId },
+          data: { status: SessionStatus.completed },
+        });
+
+        return {
+          status: SessionStatus.completed,
+          totalPool: calc.totalPool,
+          earningPerMentor: calc.earningPerMentor,
+          confirmedCount,
+          message: `Multi-mentor session concluded! Each mentor credited ${calc.earningPerMentor} credits.`,
+        };
+      }
+
+      // 3. 1-on-1 Session Payout
+      if (confirmedCount >= 1 && session.host_id) {
+        const earning = 1.0 * session.duration_hours;
+        await CreditsService.applyTransaction(tx, {
+          userId: session.host_id,
+          amount: earning,
+          type: LedgerTransactionType.session_earning,
+          referenceType: 'session',
+          referenceId: session.id,
+        });
+
+        await SessionsService.checkAndGrantMilestones(tx, session.host_id, session.duration_hours);
+      }
+
+      await tx.session.update({
+        where: { id: sessionId },
+        data: { status: SessionStatus.completed },
+      });
+
+      // Send notifications to participants
+      for (const learner of learners) {
+        const isPresent = attendanceMap.get(learner.user_id) ?? false;
+        await tx.notification.create({
+          data: {
+            user_id: learner.user_id,
+            type: NotificationType.session_milestone,
+            reference_type: isPresent ? 'session_concluded' : 'session_absent',
+            reference_id: session.id,
+            title: isPresent ? 'Session Concluded 🏁' : 'Session Concluded (Marked Absent)',
+            body: isPresent
+              ? `Mentor ${session.host?.name || 'Host'} concluded "${session.title || 'your session'}". Your attendance was confirmed!`
+              : `You were marked absent for "${session.title || 'your session'}". No credits were deducted.`,
+          },
+        }).catch(() => {});
+      }
+
+      return {
+        status: SessionStatus.completed,
+        confirmedCount,
+        payout: confirmedCount >= 1 ? 1.0 * session.duration_hours : 0,
+        message: confirmedCount >= 1
+          ? `1-on-1 session concluded and settled! Host credited ${1.0 * session.duration_hours} credits.`
+          : '1-on-1 session concluded. Student was marked absent.',
+      };
+    });
+  }
 
   /**
-   * Co-Mentor invitation response (Accept / Decline)
+   * Host / Mentor: Stop session early
+   * Ends an active or scheduled session early and triggers payout / settlement with attendance
+   */
+  static async stopSessionEarly(
+    hostId: string,
+    sessionId: string,
+    attendanceList?: { userId: string; attended: boolean }[]
+  ) {
+    return await this.concludeSessionWithAttendance(hostId, sessionId, attendanceList);
+  }
+
+  /**
+   * Co-Mentor invitation response & 1-on-1 Mentorship Request response (Accept / Decline)
    */
   static async respondToMentorRequest(userId: string, sessionId: string, accept: boolean) {
+    // Check if it's a co-host request
     const mentorRecord = await prisma.sessionMentor.findUnique({
       where: {
         session_id_mentor_id: {
@@ -678,54 +951,130 @@ export class SessionsService {
       },
     });
 
-    if (!mentorRecord) {
-      throw new NotFoundError('Co-host invitation request not found');
-    }
-
-    if (mentorRecord.status !== 'pending') {
-      return {
-        success: true,
-        status: mentorRecord.status,
-        message: `Request already ${mentorRecord.status}`,
-      };
-    }
-
-    return await prisma.$transaction(async (tx) => {
-      if (accept) {
-        // Debit co-mentor 1.5 credits upfront upon accepting
-        await CreditsService.applyTransaction(tx, {
-          userId,
-          amount: -ECONOMY_CONFIG.MULTI_MENTOR_HOST_COST_PER_MENTOR,
-          type: LedgerTransactionType.mentor_host_cost,
-          referenceType: 'session',
-          referenceId: sessionId,
-        });
-
-        const updated = await tx.sessionMentor.update({
-          where: {
-            session_id_mentor_id: {
-              session_id: sessionId,
-              mentor_id: userId,
-            },
-          },
-          data: { status: 'accepted' },
-        });
-
-        return { success: true, status: 'accepted', message: 'You accepted the co-host invitation!' };
-      } else {
-        const updated = await tx.sessionMentor.update({
-          where: {
-            session_id_mentor_id: {
-              session_id: sessionId,
-              mentor_id: userId,
-            },
-          },
-          data: { status: 'declined' },
-        });
-
-        return { success: true, status: 'declined', message: 'You declined the co-host invitation.' };
+    if (mentorRecord) {
+      if (mentorRecord.status !== 'pending') {
+        return {
+          success: true,
+          status: mentorRecord.status,
+          message: `Request already ${mentorRecord.status}`,
+        };
       }
+
+      return await prisma.$transaction(async (tx) => {
+        if (accept) {
+          // Debit co-mentor 1.5 credits upfront upon accepting
+          await CreditsService.applyTransaction(tx, {
+            userId,
+            amount: -ECONOMY_CONFIG.MULTI_MENTOR_HOST_COST_PER_MENTOR,
+            type: LedgerTransactionType.mentor_host_cost,
+            referenceType: 'session',
+            referenceId: sessionId,
+          });
+
+          const updated = await tx.sessionMentor.update({
+            where: {
+              session_id_mentor_id: {
+                session_id: sessionId,
+                mentor_id: userId,
+              },
+            },
+            data: { status: 'accepted' },
+          });
+
+          return { success: true, status: 'accepted', message: 'You accepted the co-host invitation!' };
+        } else {
+          const updated = await tx.sessionMentor.update({
+            where: {
+              session_id_mentor_id: {
+                session_id: sessionId,
+                mentor_id: userId,
+              },
+            },
+            data: { status: 'declined' },
+          });
+
+          return { success: true, status: 'declined', message: 'You declined the co-host invitation.' };
+        }
+      });
+    }
+
+    // Check if it's a 1-on-1 mentorship request where current user is the invited participant/student
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: { participants: true, host: { select: { id: true, name: true } } },
     });
+
+    if (!session) {
+      throw new NotFoundError('Session request not found');
+    }
+
+    const participant = session.participants.find((p) => p.user_id === userId);
+    if (!participant && session.host_id !== userId) {
+      throw new NotFoundError('You are not invited to this session request');
+    }
+
+    if (accept) {
+      if (!participant) {
+        throw new BadRequestError('Participant record not found for this session');
+      }
+
+      await prisma.$transaction(async (tx) => {
+        // Mark participant accepted by recording confirmed_by: ConfirmedBy.self
+        await tx.sessionParticipant.update({
+          where: { id: participant.id },
+          data: {
+            confirmed_by: ConfirmedBy.self,
+          },
+        });
+
+        // Notify host that student accepted
+        if (session.host_id) {
+          const student = await tx.user.findUnique({
+            where: { id: userId },
+            select: { name: true, username: true },
+          });
+
+          await tx.notification.create({
+            data: {
+              user_id: session.host_id,
+              type: NotificationType.session_milestone,
+              reference_type: 'one_to_one_accepted',
+              reference_id: session.id,
+              title: '1-on-1 Request Accepted! 🎉',
+              body: `${student?.name || 'Your student'} (@${student?.username || 'learner'}) accepted your 1-on-1 mentorship session "${session.title || 'Mentorship'}"!`,
+            },
+          }).catch(() => {});
+        }
+      });
+
+      return { success: true, status: 'accepted', message: '1-on-1 mentorship request accepted!' };
+    } else {
+      // If student rejects 1-on-1 request, remove participant and cancel the session
+      await prisma.$transaction(async (tx) => {
+        if (participant) {
+          await tx.sessionParticipant.delete({ where: { id: participant.id } });
+        }
+        await tx.session.update({
+          where: { id: sessionId },
+          data: { status: SessionStatus.cancelled },
+        });
+
+        if (session.host_id) {
+          await tx.notification.create({
+            data: {
+              user_id: session.host_id,
+              type: NotificationType.session_milestone,
+              reference_type: 'one_to_one_declined',
+              reference_id: session.id,
+              title: '1-on-1 Request Declined',
+              body: `The requested student declined the 1-on-1 session "${session.title || 'Mentorship'}". The session was cancelled.`,
+            },
+          }).catch(() => {});
+        }
+      });
+
+      return { success: true, status: 'declined', message: '1-on-1 session request declined and cancelled.' };
+    }
   }
 
   /**
@@ -813,6 +1162,17 @@ export class SessionsService {
       const isMentorInvited = myMentorRecord?.status === 'pending';
       const mentorInviteStatus = myMentorRecord?.status || null;
 
+      const isOneToOne = s.session_type === SessionType.one_to_one;
+      const oneToOneLearner = isOneToOne ? s.participants.find((p) => p.role === ParticipantRole.learner) : null;
+      const isOneToOneStudent = isOneToOne && myParticipant && myParticipant.role === ParticipantRole.learner && !isHost;
+      const studentAcceptedOneToOne = Boolean(
+        oneToOneLearner && (oneToOneLearner.confirmed_by === ConfirmedBy.self || oneToOneLearner.attendance_confirmed)
+      );
+
+      const isOneToOnePending = Boolean(
+        isOneToOneStudent && !studentAcceptedOneToOne && s.status === SessionStatus.scheduled
+      );
+      const learnerAccepted = isOneToOne ? studentAcceptedOneToOne : true;
       const confirmedAttendanceCount = s.participants.filter((p) => p.attendance_confirmed).length;
 
       return {
@@ -868,6 +1228,8 @@ export class SessionsService {
         hasRated,
         isMentorInvited,
         mentorInviteStatus,
+        isOneToOnePending,
+        learnerAccepted,
       };
     });
   }
@@ -912,6 +1274,18 @@ export class SessionsService {
     const myMentorRecord = userId ? s.mentors.find((m) => m.mentor_id === userId) : null;
     const isMentorInvited = myMentorRecord?.status === 'pending';
     const mentorInviteStatus = myMentorRecord?.status || null;
+
+    const isOneToOne = s.session_type === SessionType.one_to_one;
+    const oneToOneLearner = isOneToOne ? s.participants.find((p) => p.role === ParticipantRole.learner) : null;
+    const isOneToOneStudent = isOneToOne && myParticipant && myParticipant.role === ParticipantRole.learner && !isHost;
+    const studentAcceptedOneToOne = Boolean(
+      oneToOneLearner && (oneToOneLearner.confirmed_by === ConfirmedBy.self || oneToOneLearner.attendance_confirmed)
+    );
+
+    const isOneToOnePending = Boolean(
+      isOneToOneStudent && !studentAcceptedOneToOne && s.status === SessionStatus.scheduled
+    );
+    const learnerAccepted = isOneToOne ? studentAcceptedOneToOne : true;
 
     return {
       id: s.id,
@@ -966,6 +1340,8 @@ export class SessionsService {
       hasRated,
       isMentorInvited,
       mentorInviteStatus,
+      isOneToOnePending,
+      learnerAccepted,
     };
   }
 

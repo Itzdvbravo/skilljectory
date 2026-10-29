@@ -148,10 +148,10 @@ export const SocialLinksEditor: React.FC<SocialLinksEditorProps> = ({
     <View style={styles.container}>
       <Text style={styles.sectionHeader}>VERIFIED SOCIAL PROFILES</Text>
       <Text style={styles.sectionSub}>
-        Tap to link your portfolio accounts. Linked accounts are highlighted on your public resume showcase.
+        Tap to link accounts. Linked ones show on your public resume.
       </Text>
 
-      {/* Row of Platform Icons */}
+      {/* Row of Platform Icons (Artboard Page 10 Mint Container) */}
       <View style={styles.iconsRow}>
         {PLATFORM_CONFIG.map((cfg) => {
           const isLinked = linkedMap.has(cfg.platform);
@@ -168,8 +168,9 @@ export const SocialLinksEditor: React.FC<SocialLinksEditorProps> = ({
               activeOpacity={0.7}
             >
               <IconComponent
-                size={22}
-                color={isLinked ? cfg.color : '#475569'}
+                size={20}
+                color={isLinked ? '#0E6245' : '#18201D'}
+                strokeWidth={isLinked ? 2.2 : 1.8}
               />
               {isLinked && (
                 <View style={styles.linkedBadge}>
@@ -181,7 +182,7 @@ export const SocialLinksEditor: React.FC<SocialLinksEditorProps> = ({
         })}
       </View>
 
-      {/* Single-field Popover Modal */}
+      {/* Single-field Popover Modal (Artboard Clean Light Theme) */}
       <Modal
         visible={isModalOpen}
         transparent
@@ -194,8 +195,8 @@ export const SocialLinksEditor: React.FC<SocialLinksEditorProps> = ({
               <Text style={styles.modalTitle}>
                 {selectedPlatform ? selectedPlatform.label : 'Social Link'}
               </Text>
-              <TouchableOpacity onPress={() => setIsModalOpen(false)}>
-                <CloseIcon size={20} color="#94A3B8" />
+              <TouchableOpacity onPress={() => setIsModalOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <CloseIcon size={20} color="#5A6561" />
               </TouchableOpacity>
             </View>
 
@@ -208,7 +209,7 @@ export const SocialLinksEditor: React.FC<SocialLinksEditorProps> = ({
               value={urlInput}
               onChangeText={setUrlInput}
               placeholder={selectedPlatform?.placeholder || 'https://...'}
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#94A3B8"
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"
@@ -221,7 +222,7 @@ export const SocialLinksEditor: React.FC<SocialLinksEditorProps> = ({
                   onPress={handleDelete}
                   disabled={loading}
                 >
-                  <Trash2 size={16} color="#EF4444" />
+                  <Trash2 size={16} color="#DC2626" />
                 </TouchableOpacity>
               )}
 
@@ -247,43 +248,49 @@ const styles = StyleSheet.create({
     marginVertical: 14,
   },
   sectionHeader: {
-    color: '#94A3B8',
-    fontSize: 12,
+    color: '#111827',
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
     marginBottom: 4,
   },
   sectionSub: {
-    color: '#64748B',
+    color: '#5A6561',
     fontSize: 12,
     marginBottom: 12,
+    lineHeight: 16,
   },
   iconsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: '#0F172A',
-    padding: 12,
-    borderRadius: 14,
+    alignItems: 'center',
+    backgroundColor: '#EBF7F0',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#D4EAD9',
   },
   iconTile: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
   },
   iconTileLinked: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: '#38BDF8',
+    borderColor: '#0E6245',
+    elevation: 2,
+    shadowColor: '#0E6245',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
   },
   iconTileUnlinked: {
-    backgroundColor: '#090D16',
-    borderWidth: 1,
-    borderColor: '#1E293B',
+    backgroundColor: 'transparent',
   },
   linkedBadge: {
     position: 'absolute',
@@ -292,13 +299,13 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: '#10B981',
+    backgroundColor: '#0E6245',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
@@ -306,37 +313,42 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: '#0F172A',
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#334155',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#E2E8E5',
     padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 8,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   modalTitle: {
-    color: '#F8FAFC',
+    color: '#111827',
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   modalSub: {
-    color: '#94A3B8',
+    color: '#5A6561',
     fontSize: 13,
-    marginBottom: 12,
+    marginBottom: 14,
   },
   modalInput: {
-    backgroundColor: '#1E293B',
-    borderWidth: 1,
-    borderColor: '#475569',
-    borderRadius: 10,
-    color: '#F8FAFC',
+    backgroundColor: '#F8FAF9',
+    borderWidth: 1.5,
+    borderColor: '#E2E8E5',
+    borderRadius: 12,
+    color: '#111827',
     padding: 12,
     fontSize: 14,
-    marginBottom: 16,
+    marginBottom: 18,
   },
   modalActions: {
     flexDirection: 'row',
@@ -346,17 +358,20 @@ const styles = StyleSheet.create({
   },
   deleteBtn: {
     padding: 12,
-    borderRadius: 10,
-    backgroundColor: '#1E293B',
+    borderRadius: 12,
+    backgroundColor: '#FEE2E2',
     borderWidth: 1,
-    borderColor: '#EF4444',
+    borderColor: '#FCA5A5',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   saveBtn: {
     flex: 1,
-    backgroundColor: '#0284C7',
+    backgroundColor: '#0E6245',
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: 22,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   saveBtnText: {
     color: '#FFFFFF',

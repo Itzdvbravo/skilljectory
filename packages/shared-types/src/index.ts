@@ -251,6 +251,7 @@ export interface SessionParticipantDto {
   id: string;
   userId: string;
   name: string;
+  username?: string | null;
   email?: string;
   avatarUrl?: string | null;
   role: ParticipantRole;
@@ -295,6 +296,8 @@ export interface SessionDto {
   hasRated?: boolean;
   isMentorInvited?: boolean;
   mentorInviteStatus?: string | null;
+  isOneToOnePending?: boolean;
+  learnerAccepted?: boolean;
 }
 
 export interface MaterialDto {
