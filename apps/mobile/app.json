@@ -31,7 +31,10 @@
       "bundler": "metro"
     },
     "extra": {
-      "apiUrl": "https://skilljectory-api-inuv.vercel.app"
+      "apiUrl": "https://skilljectory-api-inuv.vercel.app",
+      "eas": {
+        "projectId": "b1402fd8-99f4-4870-a068-e9cb7991f6f3"
+      }
     }
   }
 }
