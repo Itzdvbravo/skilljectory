@@ -1,5 +1,11 @@
 import sharp from 'sharp';
 
+// Sharp rasterizes SVGs on the API host, where platform UI fonts such as
+// system-ui may not exist (unlike on the Expo device). Prefer the standard
+// Arial/Helvetica aliases so SVG text resolves through the host's sans-serif
+// font fallback consistently.
+const EXPORT_FONT_FAMILY = 'Arial, Helvetica, sans-serif';
+
 export interface BannerExportParams {
   title: string;
   skillName: string;
@@ -190,7 +196,7 @@ export class ExportService {
     const mentorsSvg = showHostTag
       ? `
       <g transform="translate(60, 400)">
-        <text x="0" y="0" fill="#94A3B8" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="12" letter-spacing="1.5">
+        <text x="0" y="0" fill="#94A3B8" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="12" letter-spacing="1.5">
           ${isGroupOrMulti ? `SESSION MENTORS (${mentorsList.length})` : 'HOST MENTOR'}
         </text>
         <g transform="translate(0, 15)">
@@ -211,11 +217,11 @@ export class ExportService {
               <g transform="translate(${xPos}, 0)">
                 <rect width="${mentorCardWidth}" height="68" rx="16" fill="#161B22" stroke="rgba(255,255,255,0.08)" stroke-width="1.5"/>
                 <circle cx="34" cy="34" r="20" fill="${badgeFill}"/>
-                <text x="34" y="40" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="900" font-size="13" text-anchor="middle">${initials}</text>
-                <text x="64" y="30" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="800" font-size="15">${mentor.name}</text>
-                <text x="64" y="48" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="600" font-size="12">@${mentor.username || 'mentor'}</text>
+                <text x="34" y="40" fill="#FFFFFF" font-family="${EXPORT_FONT_FAMILY}" font-weight="900" font-size="13" text-anchor="middle">${initials}</text>
+                <text x="64" y="30" fill="#FFFFFF" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="15">${mentor.name}</text>
+                <text x="64" y="48" fill="#94A3B8" font-family="${EXPORT_FONT_FAMILY}" font-weight="600" font-size="12">@${mentor.username || 'mentor'}</text>
                 <rect x="${mentorCardWidth - 85}" y="20" width="75" height="26" rx="13" fill="${badgeFill}20" stroke="${badgeFill}60" stroke-width="1"/>
-                <text x="${mentorCardWidth - 47.5}" y="37" fill="${mentor.isHost ? '#FF7A00' : '#38BDF8'}" font-family="system-ui, sans-serif" font-weight="800" font-size="11" text-anchor="middle">${badgeLabel}</text>
+                <text x="${mentorCardWidth - 47.5}" y="37" fill="${mentor.isHost ? '#FF7A00' : '#38BDF8'}" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="11" text-anchor="middle">${badgeLabel}</text>
               </g>`;
             })
             .join('')}
@@ -230,7 +236,7 @@ export class ExportService {
             (tag, i) => `
         <g transform="translate(${i * 155}, 0)">
           <rect width="145" height="34" rx="17" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
-          <text x="72.5" y="22" fill="#F8FAFC" font-family="system-ui, sans-serif" font-weight="700" font-size="13" text-anchor="middle">#${this.escapeXml(tag)}</text>
+          <text x="72.5" y="22" fill="#F8FAFC" font-family="${EXPORT_FONT_FAMILY}" font-weight="700" font-size="13" text-anchor="middle">#${this.escapeXml(tag)}</text>
         </g>`
           )
           .join('')
@@ -268,20 +274,20 @@ export class ExportService {
       <g transform="translate(60, 75)">
         <!-- Activity Type Pill -->
         <rect width="180" height="34" rx="17" fill="#FC5200"/>
-        <text x="90" y="22" fill="#FFFFFF" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="12" text-anchor="middle" letter-spacing="0.8">⚡ ${formatLabel}</text>
+        <text x="90" y="22" fill="#FFFFFF" font-family="${EXPORT_FONT_FAMILY}" font-weight="900" font-size="12" text-anchor="middle" letter-spacing="0.8">⚡ ${formatLabel}</text>
 
         <!-- Campus Verified Pill with Pulsing Live Dot -->
         <rect x="195" y="0" width="205" height="34" rx="17" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
         <circle cx="215" cy="17" r="5" fill="#10B981"/>
-        <text x="230" y="22" fill="#F8FAFC" font-family="system-ui, sans-serif" font-weight="800" font-size="12" letter-spacing="0.5">ADTU VERIFIED EVENT</text>
+        <text x="230" y="22" fill="#F8FAFC" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="12" letter-spacing="0.5">ADTU VERIFIED EVENT</text>
 
         <!-- Date & Time Right Aligned -->
-        <text x="1080" y="23" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="700" font-size="14" text-anchor="end">${dateStr} • ${timeStr}</text>
+        <text x="1080" y="23" fill="#94A3B8" font-family="${EXPORT_FONT_FAMILY}" font-weight="700" font-size="14" text-anchor="end">${dateStr} • ${timeStr}</text>
       </g>
 
       <!-- Event Title -->
-      <text x="60" y="160" fill="#FFFFFF" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="38" letter-spacing="-0.8">${title}</text>
-      <text x="60" y="194" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="500" font-size="16">Assam Down Town University • Peer-to-Peer Academic Knowledge Network</text>
+      <text x="60" y="160" fill="#FFFFFF" font-family="${EXPORT_FONT_FAMILY}" font-weight="900" font-size="38" letter-spacing="-0.8">${title}</text>
+      <text x="60" y="194" fill="#94A3B8" font-family="${EXPORT_FONT_FAMILY}" font-weight="500" font-size="16">Assam Down Town University • Peer-to-Peer Academic Knowledge Network</text>
 
       <!-- Strava Dynamic Elevation / Trajectory Polyline -->
       <g transform="translate(60, 210)">
@@ -304,9 +310,9 @@ export class ExportService {
 
         <!-- Stat 1: Student Attendees / Format -->
         <g transform="translate(35, 20)">
-          <text x="0" y="40" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="900" font-size="${isGroupOrMulti ? '42' : '30'}">${stat1Value}</text>
-          <text x="${isGroupOrMulti ? '65' : '150'}" y="38" fill="#FC5200" font-family="system-ui, sans-serif" font-weight="800" font-size="18">${stat1Sub}</text>
-          <text x="0" y="66" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="800" font-size="11" letter-spacing="1.2">${stat1Label}</text>
+          <text x="0" y="40" fill="#FFFFFF" font-family="${EXPORT_FONT_FAMILY}" font-weight="900" font-size="${isGroupOrMulti ? '42' : '30'}">${stat1Value}</text>
+          <text x="${isGroupOrMulti ? '65' : '150'}" y="38" fill="#FC5200" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="18">${stat1Sub}</text>
+          <text x="0" y="66" fill="#94A3B8" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="11" letter-spacing="1.2">${stat1Label}</text>
         </g>
 
         <!-- Divider 1 -->
@@ -314,9 +320,9 @@ export class ExportService {
 
         <!-- Stat 2: Duration Hours -->
         <g transform="translate(335, 20)">
-          <text x="0" y="40" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="900" font-size="42">${stat2Value}</text>
-          <text x="50" y="38" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="800" font-size="18">${stat2Sub}</text>
-          <text x="0" y="66" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="800" font-size="11" letter-spacing="1.2">${stat2Label}</text>
+          <text x="0" y="40" fill="#FFFFFF" font-family="${EXPORT_FONT_FAMILY}" font-weight="900" font-size="42">${stat2Value}</text>
+          <text x="50" y="38" fill="#94A3B8" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="18">${stat2Sub}</text>
+          <text x="0" y="66" fill="#94A3B8" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="11" letter-spacing="1.2">${stat2Label}</text>
         </g>
 
         <!-- Divider 2 -->
@@ -324,9 +330,9 @@ export class ExportService {
 
         <!-- Stat 3: Credits Generated -->
         <g transform="translate(605, 20)">
-          <text x="0" y="40" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="900" font-size="42">${stat3Value}</text>
-          <text x="65" y="38" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="800" font-size="18">${stat3Sub}</text>
-          <text x="0" y="66" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="800" font-size="11" letter-spacing="1.2">${stat3Label}</text>
+          <text x="0" y="40" fill="#FFFFFF" font-family="${EXPORT_FONT_FAMILY}" font-weight="900" font-size="42">${stat3Value}</text>
+          <text x="65" y="38" fill="#94A3B8" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="18">${stat3Sub}</text>
+          <text x="0" y="66" fill="#94A3B8" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="11" letter-spacing="1.2">${stat3Label}</text>
         </g>
 
         <!-- Divider 3 -->
@@ -334,8 +340,8 @@ export class ExportService {
 
         <!-- Stat 4: Rating / Quality Level -->
         <g transform="translate(875, 20)">
-          <text x="0" y="40" fill="#10B981" font-family="system-ui, sans-serif" font-weight="900" font-size="34">VERIFIED</text>
-          <text x="0" y="66" fill="#94A3B8" font-family="system-ui, sans-serif" font-weight="800" font-size="11" letter-spacing="1.2">CAMPUS PEER NETWORK</text>
+          <text x="0" y="40" fill="#10B981" font-family="${EXPORT_FONT_FAMILY}" font-weight="900" font-size="34">VERIFIED</text>
+          <text x="0" y="66" fill="#94A3B8" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="11" letter-spacing="1.2">CAMPUS PEER NETWORK</text>
         </g>
       </g>
 
@@ -357,8 +363,8 @@ export class ExportService {
             ? `
         <g transform="translate(640, 0)">
           <rect width="440" height="34" rx="17" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-          <text x="20" y="22" fill="#FC5200" font-family="system-ui, sans-serif" font-size="14">📍</text>
-          <text x="44" y="22" fill="#E2E8F0" font-family="system-ui, sans-serif" font-weight="700" font-size="13">${locationText}</text>
+          <text x="20" y="22" fill="#FC5200" font-family="${EXPORT_FONT_FAMILY}" font-size="14">📍</text>
+          <text x="44" y="22" fill="#E2E8F0" font-family="${EXPORT_FONT_FAMILY}" font-weight="700" font-size="13">${locationText}</text>
         </g>`
             : ''
         }
@@ -370,14 +376,14 @@ export class ExportService {
       <!-- Footer Brand Watermark -->
       <g transform="translate(60, 680)">
         <rect width="18" height="18" rx="4" fill="#FC5200"/>
-        <text x="9" y="14" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="900" font-size="11" text-anchor="middle">S</text>
-        <text x="28" y="15" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="900" font-size="15" letter-spacing="1.5">SKILLJECTORY</text>
-        <text x="165" y="15" fill="#64748B" font-family="system-ui, sans-serif" font-weight="700" font-size="12">• CAMPUS ATHLETICS OF THE MIND</text>
+        <text x="9" y="14" fill="#FFFFFF" font-family="${EXPORT_FONT_FAMILY}" font-weight="900" font-size="11" text-anchor="middle">S</text>
+        <text x="28" y="15" fill="#FFFFFF" font-family="${EXPORT_FONT_FAMILY}" font-weight="900" font-size="15" letter-spacing="1.5">SKILLJECTORY</text>
+        <text x="165" y="15" fill="#64748B" font-family="${EXPORT_FONT_FAMILY}" font-weight="700" font-size="12">• CAMPUS ATHLETICS OF THE MIND</text>
       </g>
 
       <!-- Right Footer Verification Seal -->
       <g transform="translate(1140, 680)">
-        <text x="0" y="15" fill="#10B981" font-family="system-ui, sans-serif" font-weight="800" font-size="13" text-anchor="end">ADTU DIGITAL CERTIFIED PASS ✓</text>
+        <text x="0" y="15" fill="#10B981" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="13" text-anchor="end">ADTU DIGITAL CERTIFIED PASS ✓</text>
       </g>
     </svg>`.trim();
 
@@ -427,13 +433,13 @@ export class ExportService {
       <g transform="translate(60, ${currentY})">
         <rect width="1080" height="110" rx="20" fill="${palette.cardBg}" stroke="${palette.border}" stroke-width="1.5"/>
         <circle cx="65" cy="55" r="34" fill="${palette.primary}"/>
-        <text x="65" y="66" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="900" font-size="24" text-anchor="middle">${name.substring(0, 2).toUpperCase()}</text>
+        <text x="65" y="66" fill="#FFFFFF" font-family="${EXPORT_FONT_FAMILY}" font-weight="900" font-size="24" text-anchor="middle">${name.substring(0, 2).toUpperCase()}</text>
         
-        <text x="120" y="48" fill="#111827" font-family="system-ui, sans-serif" font-weight="800" font-size="26">${name}</text>
-        <text x="120" y="76" fill="${palette.primary}" font-family="system-ui, sans-serif" font-weight="700" font-size="16">@${username} • Student ID: ${studentId}</text>
+        <text x="120" y="48" fill="#111827" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="26">${name}</text>
+        <text x="120" y="76" fill="${palette.primary}" font-family="${EXPORT_FONT_FAMILY}" font-weight="700" font-size="16">@${username} • Student ID: ${studentId}</text>
 
         <rect x="910" y="38" width="140" height="34" rx="17" fill="${palette.primary}"/>
-        <text x="980" y="60" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="800" font-size="12" text-anchor="middle">VERIFIED SCHOLAR ✓</text>
+        <text x="980" y="60" fill="#FFFFFF" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="12" text-anchor="middle">VERIFIED SCHOLAR ✓</text>
       </g>`;
     currentY += 135;
 
@@ -443,8 +449,8 @@ export class ExportService {
       bioBlock = `
         <g transform="translate(60, ${currentY})">
           <rect width="1080" height="85" rx="16" fill="#F8FAF9" stroke="#E2E8E5" stroke-width="1.5"/>
-          <text x="30" y="32" fill="#5A6561" font-family="system-ui, sans-serif" font-weight="800" font-size="12" letter-spacing="1">ACADEMIC STATEMENT &amp; TEACHING PHILOSOPHY</text>
-          <text x="30" y="62" fill="#111827" font-family="system-ui, sans-serif" font-weight="500" font-size="16">"${bio}"</text>
+          <text x="30" y="32" fill="#5A6561" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="12" letter-spacing="1">ACADEMIC STATEMENT &amp; TEACHING PHILOSOPHY</text>
+          <text x="30" y="62" fill="#111827" font-family="${EXPORT_FONT_FAMILY}" font-weight="500" font-size="16">"${bio}"</text>
         </g>`;
       currentY += 110;
     }
@@ -454,34 +460,34 @@ export class ExportService {
     if (showStats) {
       statsBlock = `
         <g transform="translate(60, ${currentY})">
-          <text x="0" y="0" fill="#5A6561" font-family="system-ui, sans-serif" font-weight="800" font-size="13" letter-spacing="1">OFFICIAL VERIFIED TEACHING &amp; PARTICIPATION METRICS</text>
+          <text x="0" y="0" fill="#5A6561" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="13" letter-spacing="1">OFFICIAL VERIFIED TEACHING &amp; PARTICIPATION METRICS</text>
           
           <!-- Tile 1 -->
           <g transform="translate(0, 15)">
             <rect width="250" height="110" rx="16" fill="#FFFFFF" stroke="${palette.primary}" stroke-width="2"/>
-            <text x="24" y="42" fill="#5A6561" font-family="system-ui, sans-serif" font-weight="700" font-size="13">TEACHING HOURS</text>
-            <text x="24" y="86" fill="${palette.primary}" font-family="system-ui, sans-serif" font-weight="900" font-size="36">${hours}<tspan font-size="18" font-weight="700"> hrs</tspan></text>
+            <text x="24" y="42" fill="#5A6561" font-family="${EXPORT_FONT_FAMILY}" font-weight="700" font-size="13">TEACHING HOURS</text>
+            <text x="24" y="86" fill="${palette.primary}" font-family="${EXPORT_FONT_FAMILY}" font-weight="900" font-size="36">${hours}<tspan font-size="18" font-weight="700"> hrs</tspan></text>
           </g>
 
           <!-- Tile 2 -->
           <g transform="translate(275, 15)">
             <rect width="250" height="110" rx="16" fill="#FFFFFF" stroke="${palette.primary}" stroke-width="2"/>
-            <text x="24" y="42" fill="#5A6561" font-family="system-ui, sans-serif" font-weight="700" font-size="13">SESSIONS HELD</text>
-            <text x="24" y="86" fill="#111827" font-family="system-ui, sans-serif" font-weight="900" font-size="36">${sessions}</text>
+            <text x="24" y="42" fill="#5A6561" font-family="${EXPORT_FONT_FAMILY}" font-weight="700" font-size="13">SESSIONS HELD</text>
+            <text x="24" y="86" fill="#111827" font-family="${EXPORT_FONT_FAMILY}" font-weight="900" font-size="36">${sessions}</text>
           </g>
 
           <!-- Tile 3 -->
           <g transform="translate(550, 15)">
             <rect width="250" height="110" rx="16" fill="#FFFFFF" stroke="${palette.primary}" stroke-width="2"/>
-            <text x="24" y="42" fill="#5A6561" font-family="system-ui, sans-serif" font-weight="700" font-size="13">STUDENT RATING</text>
-            <text x="24" y="86" fill="#D97706" font-family="system-ui, sans-serif" font-weight="900" font-size="36">${showRating ? `${rating} ★` : 'Verified'}</text>
+            <text x="24" y="42" fill="#5A6561" font-family="${EXPORT_FONT_FAMILY}" font-weight="700" font-size="13">STUDENT RATING</text>
+            <text x="24" y="86" fill="#D97706" font-family="${EXPORT_FONT_FAMILY}" font-weight="900" font-size="36">${showRating ? `${rating} ★` : 'Verified'}</text>
           </g>
 
           <!-- Tile 4 -->
           <g transform="translate(825, 15)">
             <rect width="255" height="110" rx="16" fill="#FFFFFF" stroke="${palette.primary}" stroke-width="2"/>
-            <text x="24" y="42" fill="#5A6561" font-family="system-ui, sans-serif" font-weight="700" font-size="13">CREDITS EARNED</text>
-            <text x="24" y="86" fill="${palette.primary}" font-family="system-ui, sans-serif" font-weight="900" font-size="36">${credits}<tspan font-size="18" font-weight="700"> cr</tspan></text>
+            <text x="24" y="42" fill="#5A6561" font-family="${EXPORT_FONT_FAMILY}" font-weight="700" font-size="13">CREDITS EARNED</text>
+            <text x="24" y="86" fill="${palette.primary}" font-family="${EXPORT_FONT_FAMILY}" font-weight="900" font-size="36">${credits}<tspan font-size="18" font-weight="700"> cr</tspan></text>
           </g>
         </g>`;
       currentY += 165;
@@ -497,14 +503,14 @@ export class ExportService {
           return `
             <g transform="translate(${col * 365}, ${row * 50 + 20})">
               <rect width="345" height="40" rx="20" fill="${palette.cardBg}" stroke="${palette.border}" stroke-width="1.5"/>
-              <text x="20" y="25" fill="${palette.primary}" font-family="system-ui, sans-serif" font-weight="800" font-size="14">✓  ${this.escapeXml(s)}</text>
+              <text x="20" y="25" fill="${palette.primary}" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="14">✓  ${this.escapeXml(s)}</text>
             </g>`;
         })
         .join('');
 
       skillsBlock = `
         <g transform="translate(60, ${currentY})">
-          <text x="0" y="0" fill="#5A6561" font-family="system-ui, sans-serif" font-weight="800" font-size="13" letter-spacing="1">VERIFIED SUBJECT COMPETENCIES &amp; SKILLS</text>
+          <text x="0" y="0" fill="#5A6561" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="13" letter-spacing="1">VERIFIED SUBJECT COMPETENCIES &amp; SKILLS</text>
           ${skillPills}
         </g>`;
       currentY += Math.ceil(skills.length / 3) * 55 + 30;
@@ -519,15 +525,15 @@ export class ExportService {
             <g transform="translate(${idx * 275}, 20)">
               <rect width="260" height="54" rx="14" fill="#FFFFFF" stroke="#E2E8E5" stroke-width="1.5"/>
               <circle cx="28" cy="27" r="14" fill="${palette.primary}"/>
-              <text x="28" y="32" fill="#FFFFFF" font-family="system-ui, sans-serif" font-size="13" text-anchor="middle">★</text>
-              <text x="50" y="32" fill="#111827" font-family="system-ui, sans-serif" font-weight="700" font-size="13">${this.escapeXml(b)}</text>
+              <text x="28" y="32" fill="#FFFFFF" font-family="${EXPORT_FONT_FAMILY}" font-size="13" text-anchor="middle">★</text>
+              <text x="50" y="32" fill="#111827" font-family="${EXPORT_FONT_FAMILY}" font-weight="700" font-size="13">${this.escapeXml(b)}</text>
             </g>`;
         })
         .join('');
 
       badgesBlock = `
         <g transform="translate(60, ${currentY})">
-          <text x="0" y="0" fill="#5A6561" font-family="system-ui, sans-serif" font-weight="800" font-size="13" letter-spacing="1">CAMPUS HONORS &amp; RECOGNITION</text>
+          <text x="0" y="0" fill="#5A6561" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="13" letter-spacing="1">CAMPUS HONORS &amp; RECOGNITION</text>
           ${badgePills}
         </g>`;
       currentY += 105;
@@ -543,9 +549,9 @@ export class ExportService {
       <path d="M26 50C26 36.7452 36.7452 26 50 26H1150C1163.25 26 1174 36.7452 1174 50V68H26V50Z" fill="${palette.primary}"/>
 
       <!-- Header Typography -->
-      <text x="60" y="112" fill="${palette.primary}" font-family="system-ui, sans-serif" font-weight="800" font-size="13" letter-spacing="1.5">ASSAM DOWN TOWN UNIVERSITY • CAMPUS PEER MENTORSHIP EXCHANGE</text>
-      <text x="60" y="152" fill="#111827" font-family="system-ui, sans-serif" font-weight="900" font-size="34" letter-spacing="-0.5">VERIFIED ACADEMIC &amp; MENTOR RESUME</text>
-      <text x="60" y="180" fill="#5A6561" font-family="system-ui, sans-serif" font-weight="500" font-size="16">Official SkillJectory Peer-to-Peer Teaching Credential &amp; Portfolio</text>
+      <text x="60" y="112" fill="${palette.primary}" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="13" letter-spacing="1.5">ASSAM DOWN TOWN UNIVERSITY • CAMPUS PEER MENTORSHIP EXCHANGE</text>
+      <text x="60" y="152" fill="#111827" font-family="${EXPORT_FONT_FAMILY}" font-weight="900" font-size="34" letter-spacing="-0.5">VERIFIED ACADEMIC &amp; MENTOR RESUME</text>
+      <text x="60" y="180" fill="#5A6561" font-family="${EXPORT_FONT_FAMILY}" font-weight="500" font-size="16">Official SkillJectory Peer-to-Peer Teaching Credential &amp; Portfolio</text>
 
       <line x1="60" y1="205" x2="1140" y2="205" stroke="${palette.border}" stroke-width="2"/>
 
@@ -566,11 +572,11 @@ export class ExportService {
 
       <!-- Official Academic Seal & Footer -->
       <line x1="60" y1="1240" x2="1140" y2="1240" stroke="#E2E8E5" stroke-width="1.5"/>
-      <text x="60" y="1275" fill="#9CA3AF" font-family="system-ui, sans-serif" font-weight="700" font-size="13">ACADEMIC VERIFICATION SEAL: ADTU-REG-VERIFIED-PASSED</text>
-      <text x="60" y="1296" fill="#9CA3AF" font-family="system-ui, sans-serif" font-weight="500" font-size="12">Immutable record generated via SkillJectory Time-Credit Peer Exchange • ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</text>
+      <text x="60" y="1275" fill="#9CA3AF" font-family="${EXPORT_FONT_FAMILY}" font-weight="700" font-size="13">ACADEMIC VERIFICATION SEAL: ADTU-REG-VERIFIED-PASSED</text>
+      <text x="60" y="1296" fill="#9CA3AF" font-family="${EXPORT_FONT_FAMILY}" font-weight="500" font-size="12">Immutable record generated via SkillJectory Time-Credit Peer Exchange • ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</text>
 
       <rect x="940" y="1255" width="200" height="42" rx="21" fill="${palette.primary}"/>
-      <text x="1040" y="1282" fill="#FFFFFF" font-family="system-ui, sans-serif" font-weight="800" font-size="13" text-anchor="middle">OFFICIAL CREDENTIAL ✓</text>
+      <text x="1040" y="1282" fill="#FFFFFF" font-family="${EXPORT_FONT_FAMILY}" font-weight="800" font-size="13" text-anchor="middle">OFFICIAL CREDENTIAL ✓</text>
     </svg>`.trim();
 
     const buffer = await sharp(Buffer.from(svg)).png({ compressionLevel: 9 }).toBuffer();
